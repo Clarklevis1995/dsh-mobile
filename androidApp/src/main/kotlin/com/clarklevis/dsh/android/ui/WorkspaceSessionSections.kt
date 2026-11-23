@@ -41,7 +41,7 @@ internal sealed interface WorkspaceSessionListEntry {
         override val key: String get() = "section-$workspaceId"
     }
 
-    data class Session(val session: SessionSummary) : WorkspaceSessionListEntry {
+    data class Session(val session: SessionSummary, val isPinned: Boolean) : WorkspaceSessionListEntry {
         override val key: String get() = "session-${session.id}"
     }
 
@@ -54,24 +54,20 @@ internal sealed interface WorkspaceSessionListEntry {
 internal fun recentWorkspaceSessionEntries(
     sessions: List<SessionSummary>,
     scopeId: String,
-    expandedSectionIds: Set<String> = emptySet()
-): List<WorkspaceSessionListEntry> {
+    expandedSectionIds: Set<String> = emptySet(),
+    pins: List<String> = emptyList()
+): List<WorkspaceSessionListEntry> = buildList {
     val toggleId = "recent-$scopeId"
-    val expanded = toggleId in expandedSectionIds
-    return buildList {
-        val visible = if (expanded) sessions else sessions.take(COLLAPSED_RECENT_LIMIT)
-        visible.forEach { add(WorkspaceSessionListEntry.Session(it)) }
-        if (sessions.size > COLLAPSED_RECENT_LIMIT) {
-            add(WorkspaceSessionListEntry.Toggle(toggleId, sessions.size - COLLAPSED_RECENT_LIMIT, expanded))
-        }
-    }
+    val ranks = pins.withIndex().associate { it.value to it.index }
+    appendSessionRows(sessions, toggleId, COLLAPSED_RECENT_LIMIT, toggleId in expandedSectionIds, ranks)
 }
 
 /** 输入已经过工作区和搜索过滤；此处一次性建立归属索引，避免逐行扫描所有工作区。 */
 internal fun allWorkspaceSessionEntries(
     sessions: List<SessionSummary>,
     workspaces: List<GatewayWorkspace>,
-    expandedSectionIds: Set<String> = emptySet()
+    expandedSectionIds: Set<String> = emptySet(),
+    pins: List<String> = emptyList()
 ): List<WorkspaceSessionListEntry> {
     val owners = buildMap {
         workspaces.forEach { workspace ->
@@ -91,16 +87,30 @@ internal fun allWorkspaceSessionEntries(
         compareByDescending<Map.Entry<String, List<SessionSummary>>> { it.value.first().lastActivityEpochSeconds }
             .thenBy { it.key }
     )
+    val ranks = pins.withIndex().associate { it.value to it.index }
     return buildList {
         ordered.forEachIndexed { index, (id, rows) ->
             val expanded = id in expandedSectionIds
             add(WorkspaceSessionListEntry.Header(id, titles[id] ?: appText("未分组"), index + 1, rows.size))
-            val visible = if (expanded) rows else rows.take(COLLAPSED_SECTION_LIMIT)
-            visible.forEach { add(WorkspaceSessionListEntry.Session(it)) }
-            if (rows.size > COLLAPSED_SECTION_LIMIT) {
-                add(WorkspaceSessionListEntry.Toggle(id, rows.size - COLLAPSED_SECTION_LIMIT, expanded))
-            }
+            appendSessionRows(rows, id, COLLAPSED_SECTION_LIMIT, expanded, ranks)
         }
+    }
+}
+
+private fun MutableList<WorkspaceSessionListEntry>.appendSessionRows(
+    rows: List<SessionSummary>,
+    toggleId: String,
+    limit: Int,
+    expanded: Boolean,
+    ranks: Map<String, Int>
+) {
+    val pinned = if (ranks.isEmpty()) emptyList() else rows.filter { it.id in ranks }.sortedBy { ranks[it.id] }
+    val ordered = if (pinned.isEmpty()) rows else pinned + rows.filterNot { it.id in ranks }
+    val collapsedLimit = maxOf(limit, pinned.size)
+    val visible = if (expanded) ordered else ordered.take(collapsedLimit)
+    visible.forEach { add(WorkspaceSessionListEntry.Session(it, it.id in ranks)) }
+    if (rows.size > collapsedLimit) {
+        add(WorkspaceSessionListEntry.Toggle(toggleId, rows.size - collapsedLimit, expanded))
     }
 }
 

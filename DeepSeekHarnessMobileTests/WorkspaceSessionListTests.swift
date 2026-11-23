@@ -5,6 +5,22 @@ import Darwin
 @testable import DeepSeekHarnessMobile
 
 final class WorkspaceSessionListTests: XCTestCase {
+    func testHostPinOrderAppliesWithinEachWorkspace() {
+        let rows = (0..<13).map { session("s\($0)", time: Double(13 - $0)) } + [session("other", time: 20)]
+        var input = WorkspaceSessionListInput(sessions: rows,
+            workspaces: [workspace("w1", rows.dropLast().map(\.id)), workspace("w2", ["s12", "other"])],
+            selection: "w1", pins: ["s12", "s11"])
+        XCTAssertEqual(Array(sessionIDs(input.project()).prefix(2)), ["s12", "s11"])
+        input.selection = "w2"
+        XCTAssertEqual(sessionIDs(input.project()), ["s12", "other"])
+        input.selection = WorkspaceSessionScope.all
+        XCTAssertEqual(Array(sessionIDs(input.project()).prefix(3)), ["other", "s12", "s11"])
+        input.archivedIDs = ["s12"]
+        XCTAssertFalse(sessionIDs(input.project()).contains("s12"))
+        input.query = "s11"
+        XCTAssertEqual(sessionIDs(input.project()), ["s11"])
+    }
+
     func testRecentSessionsExpandPastTwelveAndCollapseWithoutTruncatingSearchOrUngrouped() {
         let rows = (0..<113).map { session("recent-\($0)", time: Double(113 - $0)) }
         var input = WorkspaceSessionListInput(sessions: rows,
@@ -98,7 +114,7 @@ final class WorkspaceSessionListTests: XCTestCase {
         let result = input.project()
         XCTAssertEqual(sessionIDs(result), ["cache-only"])
         XCTAssertEqual(result.entries, [.session(SessionSummary(id: "cache-only", title: String(localized: "已缓存聊天"),
-            lastActivity: .distantPast, isRunning: false, hasUnread: false), snippet: "needle")])
+            lastActivity: .distantPast, isRunning: false, hasUnread: false), snippet: "needle", isPinned: false)])
     }
 
     func testAllSearchMatchesTitlesIDsAndCachedContentWithoutLosingGroupOrAddingHiddenSessions() {
@@ -177,7 +193,7 @@ final class WorkspaceSessionListTests: XCTestCase {
     }
 
     private func sessionIDs(_ snapshot: WorkspaceSessionListSnapshot) -> [String] {
-        snapshot.entries.compactMap { if case .session(let session, _) = $0 { return session.id }; return nil }
+        snapshot.entries.compactMap { if case .session(let session, _, _) = $0 { return session.id }; return nil }
     }
 
     private func session(_ id: String, title: String? = nil, time: Double = 0,
@@ -318,6 +334,44 @@ final class WorkspaceSessionListIntegrationTests: XCTestCase {
         XCTAssertLessThanOrEqual(activity.count, 3, "只需要活动和空闲边界，不应逐帧发布")
     }
 
+    func testBotHomeReportsScrollActivityInCompactAndWideLayouts() async throws {
+        guard #available(iOS 18.0, *) else { throw XCTSkip("原生滚动阶段通知需要 iOS 18") }
+        let fixture = Fixture(count: 0)
+        defer { fixture.cleanUp() }
+        fixture.store.botMode.loadDesignFixture()
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let oldKey = scene.windows.first { $0.isKeyWindow }
+        let window = UIWindow(windowScene: scene)
+        defer { window.isHidden = true; window.rootViewController = nil; oldKey?.makeKey() }
+
+        func findScroll(_ view: UIView) -> UIScrollView? {
+            if let scroll = view as? UIScrollView { return scroll }
+            return view.subviews.lazy.compactMap { findScroll($0) }.first
+        }
+
+        for size in [CGSize(width: 390, height: 620), CGSize(width: 1024, height: 600)] {
+            var activity: [Bool] = []
+            let view = BotModeView(model: fixture.store.botMode, onStandardMode: {},
+                header: AnyView(Color.clear.frame(height: 500)),
+                onScrollActivityChanged: { active in
+                    if activity.last != active { activity.append(active) }
+                })
+                .frame(width: size.width, height: size.height)
+            let host = UIHostingController(rootView: view)
+            window.rootViewController = host
+            window.makeKeyAndVisible()
+            try await Task.sleep(for: .milliseconds(300))
+            let scroll = try XCTUnwrap(findScroll(host.view))
+            XCTAssertGreaterThan(scroll.contentSize.height, scroll.bounds.height)
+            activity.removeAll()
+            scroll.setContentOffset(CGPoint(x: 0, y: 250), animated: true)
+            try await waitFor { activity.contains(true) }
+            try await waitFor { activity.last == false }
+            XCTAssertEqual(activity, [true, false], "Bot 首页应在滚动时暂停背景，惯性结束后恢复：\(size)")
+            window.rootViewController = nil
+        }
+    }
+
     func testScrollingDefersListPublicationsAndAppliesOnlyTheLatestSearchWhenIdle() async throws {
         let fixture = Fixture(count: 3_000)
         defer { fixture.cleanUp() }
@@ -337,6 +391,47 @@ final class WorkspaceSessionListIntegrationTests: XCTestCase {
         try await waitFor { model.snapshot.matchingCount == 1 }
         XCTAssertEqual(publications, 1)
         withExtendedLifetime(token) {}
+    }
+
+    func testHostPinAndWorkspaceSwitchPublishWhileScrollIdleHasNotArrived() async throws {
+        let fixture = Fixture(count: 200)
+        defer { fixture.cleanUp() }
+        let store = fixture.store
+        var pinRequests: [[String: Any]] = []
+        store.gateway.installConnectedTransportForTesting { text in
+            guard let request = try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any],
+                  request["type"] as? String == "session-pin" else { return }
+            pinRequests.append(request)
+        }
+        func receivePins(_ ids: [String]) throws {
+            let data = try JSONSerialization.data(withJSONObject: ["kind": "session-pins", "pinnedSessionIds": ids])
+            store.gateway.onFrame?(try GatewayWireDecoder.decode(data))
+        }
+        try receivePins([])
+        store.selectWorkspace(store.workspaces[0])
+        let model = WorkspaceSessionListModel()
+        model.bind(to: store)
+        try await waitFor { model.snapshot.entries.first?.id == "session-s0" }
+
+        model.setScrolling(true)
+        store.workspaces[0].title = "等待中的目录更新"
+        try await Task.sleep(for: .milliseconds(150))
+        store.setWorkspaceSessionPinned("s2", pinned: true)
+        XCTAssertEqual(pinRequests.count, 1)
+        XCTAssertEqual(pinRequests.first?["sessionId"] as? String, "s2")
+        XCTAssertEqual(pinRequests.first?["pinned"] as? Bool, true)
+        XCTAssertEqual(model.snapshot.entries.first?.id, "session-s0")
+        try receivePins(["s2"])
+        try await waitFor { model.snapshot.entries.first?.id == "session-s2" }
+        store.selectWorkspace(store.workspaces[1])
+        try await waitFor { model.snapshot.entries.first?.id == "session-s100" }
+        model.setScrolling(false)
+        try await Task.sleep(for: .milliseconds(150))
+        XCTAssertEqual(model.snapshot.entries.first?.id, "session-s100")
+        store.selectWorkspace(store.workspaces[0])
+        try await waitFor { model.snapshot.entries.first?.id == "session-s2" }
+        try receivePins([])
+        try await waitFor { model.snapshot.entries.first?.id == "session-s0" }
     }
 
     func testToggleExpandsAndCollapsesOnlyItsOwnGroupAndSurvivesSearch() async throws {

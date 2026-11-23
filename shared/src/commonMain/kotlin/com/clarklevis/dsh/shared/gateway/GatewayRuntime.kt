@@ -61,7 +61,8 @@ data class GatewayRuntimeState(
     val reconnectAttempt: Int = 0,
     val activeTurnSessionIds: Set<String> = emptySet(),
     val hasUnassociatedTurn: Boolean = false,
-    val lastError: String? = null
+    val lastError: String? = null,
+    val pinnedSessionIds: List<String>? = null
 ) {
     val shouldKeepAliveInBackground: Boolean
         get() = activeTurnSessionIds.isNotEmpty() || hasUnassociatedTurn
@@ -838,9 +839,18 @@ class GatewayRuntime(
                 protocolVersion = frame.protocolVersion ?: 1,
                 capabilities = frame.capabilities.orEmpty().toSet(),
                 reconnectAttempt = 0,
-                lastError = null
+                lastError = null,
+                pinnedSessionIds = null
             )
             replayAfterHelloLocked()
+        }
+
+        // 置顶快照与 hello 都在同一连接锁内更新，避免分通道事件队列交错清空新快照。
+        if (frame.kind == "session-pins") {
+            frame.pinnedSessionIds?.let { ids ->
+                mutableState.value = mutableState.value.copy(pinnedSessionIds = ids)
+            }
+            return null
         }
 
         if (frame.kind == "session-status" && !frame.sessionId.isNullOrBlank() && frame.running != null) {
@@ -854,7 +864,7 @@ class GatewayRuntime(
                 frame.requestType?.startsWith("bot-") == true ||
                 frame.requestType?.startsWith("file-") == true ||
                 frame.requestType?.startsWith("workspace-changes-") == true ||
-                frame.requestType in setOf("session-agent-preset", "select-agent-preset", "agent-team", "subagents", "agent-team-set-enabled") ||
+                frame.requestType in setOf("session-agent-preset", "select-agent-preset", "agent-team", "subagents", "agent-team-set-enabled", "session-pin") ||
                 conversationTargets[frame.sessionId]?.parentSessionId != null) {
                 return FrameDelivery(GatewayRuntimeEvent.Frame(transportFrame.text, frame, correlation.sessionId, correlation.isBackgroundHistory),
                     transportFrame.byteCount.toLong())
@@ -1047,7 +1057,8 @@ class GatewayRuntime(
             "speech-preparation-cancelled", "speech-transcript", "speech-cancelled",
             "sent", "file-upload-opened", "file-upload-chunk-accepted", "file-upload-completed", "file-upload-cancelled",
             "workspace-changes-summary", "workspace-changes-diff",
-            "session-created", "session-agent-preset", "select-agent-preset", "agent-team-mode-set", "file-resolved", "file-list", "file-download-opened" -> frame.requestId
+            "session-created", "session-agent-preset", "select-agent-preset", "agent-team-mode-set",
+            "session-pin-set", "file-resolved", "file-list", "file-download-opened" -> frame.requestId
             "file-download-chunk", "file-download-cancelled" -> frame.transferId
             "command-options", "command-selected" -> frame.command?.stringValue
             else -> null
@@ -1610,7 +1621,7 @@ class GatewayRuntime(
             "workspace-changes-summary", "workspace-changes-diff",
             "history", "attachment", "sent", "question-response", "approval-response",
             "file-resolved", "file-list", "file-download-opened", "file-download-chunk", "file-download-cancelled",
-            "session-cancelled", "session-created", "queue-item-updated",
+            "session-cancelled", "session-created", "session-pin-set", "queue-item-updated",
             "session-agent-preset", "select-agent-preset", "agent-team-mode-set",
             "speech-catalog", "speech-subscribed", "speech-unsubscribed", "speech-preparing",
             "speech-preparation-cancelled", "speech-transcript", "speech-cancelled"

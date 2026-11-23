@@ -548,6 +548,7 @@ final class AppStore: ObservableObject {
         }
     }
     @Published private(set) var archivedSessionIds: Set<String> = []
+    @Published private(set) var pinnedWorkspaceSessionIDs: [String]?
     /// Raw protocol storage. UI updates are driven by the throttled compact
     /// conversation projection instead of invalidating every view for every
     /// token frame.
@@ -3803,6 +3804,7 @@ final class AppStore: ObservableObject {
                 deviceName ?? String(localized: "长期凭据已安全保存到 Keychain")
             )
         case .hello(let payload):
+            pinnedWorkspaceSessionIDs = nil
             offlineHistoryBoundarySessionIds.removeAll()
             offlineHistoryLoadingOlderSessionIds.removeAll()
             // hello 定义新的连接代际。必须先清除上一代 request identity/quarantine，
@@ -4133,6 +4135,11 @@ final class AppStore: ObservableObject {
         gateway.archiveSession(sessionId: sessionID)
     }
 
+    func setWorkspaceSessionPinned(_ sessionID: String, pinned: Bool) {
+        guard gateway.state.isConnected, pinnedWorkspaceSessionIDs != nil else { return }
+        gateway.setSessionPinned(sessionId: sessionID, pinned: pinned)
+    }
+
     func renameSession(_ sessionID: String, title: String) {
         guard gateway.state.isConnected else {
             lastError = String(localized: "请先在设置中连接 DeepSeek Harness")
@@ -4169,6 +4176,8 @@ final class AppStore: ObservableObject {
         case .sessionArchives(let ids):
             dispatchSessionListIntent(.setArchivedSessionIDs(ids))
             gateway.requestSessions()
+        case .sessionPins(let ids):
+            if pinnedWorkspaceSessionIDs != ids { pinnedWorkspaceSessionIDs = ids }
         case .sessionTitle(let id, let title, let sequence, let time):
             dispatchSessionListIntent(.eventReceived(SessionEvent(
                 sessionId: id,

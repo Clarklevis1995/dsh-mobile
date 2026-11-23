@@ -787,6 +787,10 @@ final class GatewayClient: ObservableObject {
         send(["type": "session-archive", "sessionId": sessionId])
     }
 
+    func setSessionPinned(sessionId: String, pinned: Bool) {
+        send(["type": "session-pin", "sessionId": sessionId, "pinned": pinned])
+    }
+
     func renameSession(sessionId: String, title: String) {
         send(["type": "session-rename", "sessionId": sessionId, "title": title])
     }

@@ -10,6 +10,24 @@ import org.junit.Test
 
 class WorkspaceSessionSectionsTest {
     @Test
+    fun hostPinOrderAppliesWithinEachWorkspace() {
+        val rows = sessions("row", 13)
+        val pinned = rows.take(2).reversed().map { it.id }
+        val w1 = workspace("w1", rows)
+        val w2 = workspace("w2", rows.take(2))
+        val recent = recentWorkspaceSessionEntries(rows, "w1", pins = pinned)
+            .filterIsInstance<WorkspaceSessionListEntry.Session>()
+        assertEquals(pinned, recent.take(2).map { it.session.id })
+        assertTrue(recent.take(2).all { it.isPinned })
+        val secondWorkspace = recentWorkspaceSessionEntries(rows.take(2), "w2", pins = pinned)
+            .filterIsInstance<WorkspaceSessionListEntry.Session>()
+        assertEquals(pinned, secondWorkspace.map { it.session.id })
+        val all = allWorkspaceSessionEntries(rows, listOf(w1, w2), pins = pinned)
+            .filterIsInstance<WorkspaceSessionListEntry.Session>()
+        assertEquals(pinned, all.take(2).map { it.session.id })
+    }
+
+    @Test
     fun recentSessionsExpandPastTwelveAndCollapseWithoutLosingRowsOrOrder() {
         val rows = sessions("recent", 113)
         val collapsed = recentWorkspaceSessionEntries(rows, "w1")

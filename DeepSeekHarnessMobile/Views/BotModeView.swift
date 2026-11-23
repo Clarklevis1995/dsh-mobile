@@ -25,6 +25,24 @@ final class BotModeModel: ObservableObject {
         let scenario = ProcessInfo.processInfo.environment["DSH_BOT_DESIGN_STATE"] ?? "normal"
         let fixture = ["loading", "error"].contains(scenario) ? "empty" : scenario
         var json = Self.designFixtures[fixture] ?? Self.designFixtures["normal"]!
+        if scenario == "hidden-member" || scenario.hasPrefix("conversation"),
+           var object = try? JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any],
+           var cached = object["snapshot"] as? [String: Any],
+           let chats = cached["chats"] as? [[String: Any]] {
+            cached["chats"] = chats.map { chat in
+                var chat = chat
+                if chat["id"] as? String == "researcher" { chat["hidden"] = true }
+                if chat["id"] as? String == "room" { chat["memberIds"] = ["chief", "researcher"] }
+                return chat
+            }
+            if scenario == "conversation", let team = cached["chats"] as? [[String: Any]] {
+                cached["chats"] = team + (1...24).map { ["id": "extra-\($0)", "name": "测试成员 \($0)", "role": "菜单滚动验证"] } // i18n-ignore: 隔离 UI 验收的主机样本
+            }
+            object["snapshot"] = cached
+            if let data = try? JSONSerialization.data(withJSONObject: object) {
+                json = String(decoding: data, as: UTF8.self)
+            }
+        }
         if scenario == "scroll" || scenario == "scroll-profile",
            var object = try? JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any] {
             let profile = scenario == "scroll-profile"
@@ -66,6 +84,11 @@ final class BotModeModel: ObservableObject {
                "kind": "bot-result", "requestId": requestID, "endpoint": "state", "value": value
            ]) {
             snapshot = core.acceptJson(json: String(decoding: data, as: UTF8.self)).snapshot
+        }
+        if scenario.hasPrefix("conversation"),
+           let request = activation.requests.first(where: { $0.payload.contains("bot-subscribe") }),
+           let id = request.correlationId {
+            snapshot = core.acceptJson(json: "{\"kind\":\"bot-subscribed\",\"requestId\":\"\(id)\",\"hello\":{\"capabilities\":[\"bot-conversations\",\"bot-creation\"]}}").snapshot
         }
         if scenario == "error" {
             for request in activation.requests {
@@ -190,6 +213,15 @@ final class BotModeModel: ObservableObject {
         if snapshot.referenceSearch != nil { apply(core.clearReferenceSearch()) }
     }
 
+    func beginConversation() { apply(core.beginConversation()) }
+    func conversationBots(_ query: String) -> [BotChat] { core.searchConversationBots(query: query) }
+    func openConversationBot(_ id: String) { apply(core.openConversationBot(id: id)) }
+    func toggleConversationMember(_ id: String) { apply(core.toggleConversationMember(id: id)) }
+    func updateConversationMessage(_ text: String) { apply(core.updateConversationMessage(text: text)) }
+    func createConversationRoom() { apply(core.createConversationRoom()) }
+    func retryConversationMessage() { apply(core.retryConversationMessage()) }
+    func confirmConversationNotCreated() { apply(core.confirmConversationNotCreated()) }
+    func enterCreatedConversation() { apply(core.enterCreatedConversation()) }
     func openCreation() { apply(core.openCreation()) }
     func loadCreationAgents() { apply(core.loadCreationAgents()) }
     func loadCreationAgentModels(_ route: String) { apply(core.loadCreationAgentModels(route: route)) }
@@ -294,7 +326,32 @@ final class BotModeModel: ObservableObject {
             uploads.select(sessionID: selectedSessionID, allowed: allowed)
         }
         #if DEBUG
-        if designFixture { return }
+        if designFixture {
+            if ProcessInfo.processInfo.environment["DSH_BOT_DESIGN_STATE"]?.hasPrefix("conversation") == true {
+                for request in transition.requests {
+                    guard let id = request.correlationId,
+                          let body = try? JSONSerialization.jsonObject(with: Data(request.payload.utf8)) as? [String: Any],
+                          let endpoint = body["endpoint"] as? String else { continue }
+                    if endpoint == "set-flags" || endpoint == "create-room" || endpoint == "send" {
+                        let payload = body["payload"] as? [String: Any] ?? [:]
+                        let value: [String: Any] = endpoint == "create-room" ?
+                            ["id": "created-room", "name": "大主管、研究员", "members": payload["members"] ?? []] : // i18n-ignore: 隔离 UI 验收的主机样本
+                            ["id": payload["id"] ?? "created-room"]
+                        let failure = ProcessInfo.processInfo.environment["DSH_BOT_DESIGN_STATE"] == "conversation-error"
+                        let reply: [String: Any] = failure ?
+                            ["kind": "error", "requestId": id, "code": "bot/test-failure", "message": "主机暂时无法创建群聊"] : // i18n-ignore: 隔离 UI 验收的主机样本
+                            ["kind": "bot-result", "requestId": id, "endpoint": endpoint, "value": value]
+                        if let data = try? JSONSerialization.data(withJSONObject: reply) {
+                            Task { @MainActor in
+                                try? await Task.sleep(for: .milliseconds(300))
+                                self.apply(self.core.acceptJson(json: String(decoding: data, as: UTF8.self)))
+                            }
+                        }
+                    }
+                }
+            }
+            return
+        }
         #endif
         saveTask?.cancel()
         saveTask = Task { [weak self] in
@@ -340,9 +397,14 @@ struct BotModeView: View {
     var safeArea = EdgeInsets()
     var drawerPan = AnyView(EmptyView())
     var scrollEnabled = true
+    var onScrollActivityChanged: (Bool) -> Void = { _ in }
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var showsSchedules = false
     @State private var showsRoster = false
+    @State private var newBot = false
+    @State private var menuOpening = false
+    @State private var menuImages: [String: UIImage] = [:]
+    @State private var conversationPicker: Bool?
     @State private var openedChat: String?
     @State private var selectedRole: BotRoleSelection?
     @State private var chatSearch = ""
@@ -378,6 +440,8 @@ struct BotModeView: View {
                 }
                 .scrollDisabled(!scrollEnabled).scrollIndicators(.hidden)
                 .scrollDismissesKeyboard(.interactively)
+                .modifier(WorkspaceScrollPhaseObserver(onChange: onScrollActivityChanged))
+                .onDisappear { onScrollActivityChanged(false) }
                 .accessibilityIdentifier("bot.wide-home")
             } else { compactHome }
         }
@@ -397,6 +461,22 @@ struct BotModeView: View {
         .sheet(isPresented: $showsSchedules) { BotScheduleSheet(model: model) }
         .sheet(item: $selectedRole) { role in BotRoleSheet(model: model, id: role.id) }
         .navigationDestination(isPresented: $showsRoster) { BotRosterView(model: model) }
+        .navigationDestination(isPresented: $newBot) { BotCreationView(model: model) }
+        .navigationDestination(isPresented: Binding(get: { conversationPicker != nil }, set: { if !$0 { conversationPicker = nil } })) {
+            if let group = conversationPicker {
+                BotConversationPicker(model: model, group: group) { id in
+                    conversationPicker = nil
+                    // 先退出成员页，再由主页进入同一个聊天目的地。
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .milliseconds(350))
+                        open(id)
+                    }
+                }
+            }
+        }
+        .onChangeCompat(of: model.snapshot.conversation.openedId) { _, id in
+            if menuOpening, let id { menuOpening = false; open(id) }
+        }
         .task {
             model.setForeground(scenePhase == .active)
             model.activate()
@@ -423,6 +503,8 @@ struct BotModeView: View {
         }
         .scrollDisabled(!scrollEnabled).scrollIndicators(.hidden)
         .scrollDismissesKeyboard(.interactively)
+        .modifier(WorkspaceScrollPhaseObserver(onChange: onScrollActivityChanged))
+        .onDisappear { onScrollActivityChanged(false) }
     }
 
     private func assistantContent(wide: Bool) -> some View {
@@ -486,9 +568,19 @@ struct BotModeView: View {
         let term = chatSearch.trimmingCharacters(in: .whitespacesAndNewlines)
         let chats = model.searchChats(term)
         return VStack(spacing: wide ? 16 : 10) {
-            sectionTitle(LocalizedStringKey("聊天"), trailing: !term.isEmpty
-                ? String(format: String(localized: "%lld 个结果"), chats.count) : String(localized: "群聊与私聊"))
-                .frame(minHeight: wide ? 22 : 0)
+            HStack {
+                Text("聊天").appFont(.system(size: 17, weight: .semibold))
+                Spacer()
+                if !term.isEmpty {
+                    Text(String(format: String(localized: "%lld 个结果"), chats.count))
+                        .appFont(.system(size: 12)).foregroundStyle(.secondary)
+                }
+                conversationMenu
+            }.frame(minHeight: 40)
+            if conversationPicker == nil, let error = model.snapshot.conversation.error {
+                Text(model.snapshot.conversation.errorDetail ?? error)
+                    .appFont(.system(size: 13)).foregroundStyle(.red).frame(maxWidth: .infinity, alignment: .leading)
+            }
             BotChatSearchField(text: $chatSearch, focused: $searchFocused)
                 .frame(height: 44)
             VStack(spacing: 0) {
@@ -532,6 +624,50 @@ struct BotModeView: View {
                     if index < chats.count - 1 { Divider().padding(.leading, 76) }
                 }
             }.botHomeGlass(radius: 24)
+        }
+    }
+
+    private var conversationMenu: some View {
+        Menu {
+            Section {
+                Button("新建 Bot") { newBot = true }
+                    .disabled(!model.snapshot.canCreateBot)
+                Button("新建群聊") { model.beginConversation(); conversationPicker = true }
+                    .disabled(!model.snapshot.connected || !model.snapshot.writable || !model.snapshot.conversation.supported)
+                Button("查找 Bot…") { model.beginConversation(); conversationPicker = false }
+            }
+            Section {
+                ForEach(model.snapshot.roster, id: \.id) { bot in
+                    Button { model.beginConversation(); menuOpening = true; model.openConversationBot(bot.id) } label: {
+                        Text(bot.name)
+                        if !bot.role.isEmpty { Text(bot.role) }
+                        if let image = menuImages[bot.id] { Image(uiImage: image).renderingMode(.original) }
+                    }
+                    .disabled(model.snapshot.conversation.saving || (bot.hidden &&
+                        (!model.snapshot.connected || !model.snapshot.writable || !model.snapshot.conversation.supported)))
+                    .accessibilityIdentifier("bot.conversation.open." + bot.id)
+                }
+            }
+        } label: {
+            Image(systemName: "plus").font(.system(size: 19, weight: .regular)).frame(width: 44, height: 40)
+        }
+        .glassCircleButton(onDarkBackground: colorScheme == .dark)
+        .accessibilityLabel("新建对话")
+        .accessibilityIdentifier("bot.conversation.new")
+        .disabled(model.snapshot.conversation.saving)
+        .task(id: model.snapshot.roster.map { $0.id + ($0.image ?? "") }.joined() + String(colorScheme == .dark)) {
+            menuImages = [:]
+            for bot in model.snapshot.roster {
+                guard !Task.isCancelled else { return }
+                if let source = bot.image,
+                   let image = await PluginIconImageCache.shared.image(for: .init(dataURL: source, isDark: colorScheme == .dark)),
+                   !Task.isCancelled {
+                    menuImages[bot.id] = image
+                }
+            }
+        }
+        .overlay(alignment: .bottomTrailing) {
+            if model.snapshot.conversation.saving { ProgressView().allowsHitTesting(false) }
         }
     }
 
@@ -1327,6 +1463,7 @@ private struct BotFilePreviewSheetHost: ViewModifier {
 private struct BotMessageRow: View {
     @Environment(\.locale) private var locale
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     let message: BotChatMessage
     let author: BotChat?
     let room: Bool
@@ -1427,7 +1564,9 @@ private struct BotMessageRow: View {
                     if hasReplyAction && message.files.isEmpty {
                         AssistantMessageActions(text: message.text, onReply: onReply)
                     }
-                }.frame(maxWidth: 292, alignment: user ? .trailing : .leading)
+                // 平板宽窗口使用阅读列宽度；窄窗口保留手机上限，短消息仍按内容收缩。
+                }.frame(maxWidth: horizontalSizeClass == .regular ? 720 : 292,
+                        alignment: user ? .trailing : .leading)
                 if !user { Spacer(minLength: 40) }
             }.frame(maxWidth: .infinity, alignment: user ? .trailing : .leading)
         }

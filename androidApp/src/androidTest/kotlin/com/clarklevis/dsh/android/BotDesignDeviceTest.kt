@@ -105,6 +105,16 @@ class BotDesignDeviceTest {
                     .put("text", body))
             }
             org.json.JSONObject(baseFixture).put("histories", org.json.JSONObject().put("chief", messages)).toString()
+        } else if (scenario.startsWith("conversation")) {
+            org.json.JSONObject(baseFixture).apply {
+                put("conversationTest", scenario)
+                val chats = getJSONObject("snapshot").getJSONArray("chats")
+                for (index in 0 until chats.length()) {
+                    if (chats.getJSONObject(index).optString("id") == "researcher") chats.getJSONObject(index).put("hidden", true)
+                }
+                repeat(24) { index -> chats.put(org.json.JSONObject().put("id", "extra-${index + 1}")
+                    .put("name", "测试成员 ${index + 1}").put("role", "菜单滚动验证")) }
+            }.toString()
         } else if (homeProfile) {
             org.json.JSONObject(baseFixture).apply {
                 val chats = getJSONObject("snapshot").getJSONArray("chats")
@@ -213,6 +223,52 @@ class BotDesignDeviceTest {
                         swipe(center, center - androidx.compose.ui.geometry.Offset(0f, 68.dp.toPx()), durationMillis = 600)
                     }
                     capture("scrolled-under-status")
+                }
+                return
+            }
+            if (scenario.startsWith("conversation")) {
+                compose.onNodeWithTag("bot.conversation.new").performScrollTo().performClick()
+                capture("new-conversation-menu")
+                compose.onNodeWithTag("bot.conversation.open.extra-24").performScrollTo().assertIsDisplayed()
+                capture("new-conversation-menu-scrolled")
+                androidx.test.espresso.Espresso.pressBack()
+                compose.onNodeWithTag("bot.conversation.new").performClick()
+                compose.onNodeWithTag("bot.conversation.group").performClick()
+                compose.onNodeWithTag("bot.group.admin-note").assertIsDisplayed()
+                val draft = { holder.botSnapshot.conversation }
+                compose.runOnIdle { check(draft().memberIds.isEmpty()) }
+                compose.onNodeWithTag("bot.conversation.member.chief").performScrollTo().performClick()
+                compose.onNodeWithTag("bot.conversation.member.researcher").performScrollTo().performClick()
+                compose.runOnIdle { check(draft().adminId == "chief") }
+                compose.onNodeWithTag("bot.group.remove.chief").performScrollTo().performClick()
+                compose.runOnIdle { check(draft().adminId == "researcher") }
+                compose.onNodeWithTag("bot.conversation.member.chief").performScrollTo().performClick()
+                compose.runOnIdle { check(draft().memberIds == listOf("researcher", "chief")) }
+                capture("group-ordered-members")
+                if (largeDevice) {
+                    device.setRotation(portraitRotation)
+                    compose.waitUntil(8_000) { compose.activity.resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_PORTRAIT }
+                    capture("group-portrait")
+                    device.setRotation(landscapeRotation)
+                    compose.waitUntil(8_000) { compose.activity.resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE }
+                    capture("group-landscape")
+                }
+                compose.onNodeWithTag("bot.group.message").performScrollTo().performTextInput("请一起整理调研结论。")
+                androidx.test.espresso.Espresso.closeSoftKeyboard()
+                capture("group-first-message")
+                compose.onNodeWithTag("bot.group.create").performClick()
+                if (scenario == "conversation-error") {
+                    compose.waitUntil(10_000) { holder.botSnapshot.conversation.error != null }
+                    compose.runOnIdle {
+                        check(draft().message == "请一起整理调研结论。")
+                        check(draft().memberIds == listOf("researcher", "chief"))
+                    }
+                    compose.onNodeWithTag("bot.conversation.error").performScrollTo().assertIsDisplayed()
+                    capture("group-error-preserves-draft")
+                } else {
+                    compose.waitUntil(10_000) { holder.botSnapshot.selectedChatId == "created-room" }
+                    compose.onNodeWithTag("bot.chat-identity").assertIsDisplayed()
+                    capture("group-created-chat")
                 }
                 return
             }
@@ -807,10 +863,27 @@ class BotDesignDeviceTest {
                 val longBot = bubble("long-bot")
                 check(shortUser.width < mention.width && shortUser.width < longUser.width / 2)
                 check(shortBot.width < longBot.width / 2)
-                check(longUser.height > shortUser.height && longBot.height > shortBot.height)
+                if (largeDevice) {
+                    val density = compose.activity.resources.displayMetrics.density
+                    check(longUser.width / density > 400f) { "平板长消息不能继续使用手机气泡上限" }
+                    check(longBot.width / density > 400f) { "平板 Markdown 回复应使用阅读宽度" }
+                    check(longBot.width / density <= 720f)
+                } else {
+                    check(longUser.height > shortUser.height && longBot.height > shortBot.height)
+                }
                 check(kotlin.math.abs(shortUser.right - longUser.right) < 1f)
                 check(kotlin.math.abs(shortBot.left - longBot.left) < 1f)
                 capture("01-bubble-widths")
+                if (largeDevice) {
+                    device.setRotation(landscapeRotation)
+                    compose.waitForIdle()
+                    val density = compose.activity.resources.displayMetrics.density
+                    check(bubble("long-bot").width / density > 400f)
+                    check(bubble("long-bot").width / density <= 720f)
+                    check(bubble("short-user").width < bubble("long-user").width / 2)
+                    capture("02-bubble-widths-landscape")
+                    device.setRotation(portraitRotation)
+                }
                 return
             }
             if (scenario == "files") {

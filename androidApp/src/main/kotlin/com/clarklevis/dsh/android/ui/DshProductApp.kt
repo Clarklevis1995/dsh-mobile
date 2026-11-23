@@ -4,6 +4,8 @@ package com.clarklevis.dsh.android.ui
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import android.app.Activity
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
@@ -16,6 +18,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -68,6 +72,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.Shadow as TextShadow
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -83,6 +89,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -100,6 +107,7 @@ import com.clarklevis.dsh.shared.gateway.GatewayRuntimeState
 import com.clarklevis.dsh.shared.protocol.GatewayWorkspace
 import java.util.Calendar
 import java.util.TimeZone
+import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -495,21 +503,21 @@ internal fun WorkspaceScreen(
         }
     }
 
-    val sessionScopeId = stateHolder.selectedWorkspaceId.orEmpty()
+    val sessionScopeId = if (ungroupedSelected) AndroidSharedStateHolder.UNGROUPED_WORKSPACE_ID
+        else selectedWorkspace?.workspaceId ?: AndroidSharedStateHolder.UNGROUPED_WORKSPACE_ID
+    val pins = stateHolder.gatewayState.pinnedSessionIds.orEmpty()
     // 分组排序与展开投影在后台执行；滚动只消费稳定 key 的扁平条目。
     val sessionEntries by produceState(
-        initialValue = emptyList<WorkspaceSessionListEntry>(),
-        key1 = sessions,
-        key2 = workspaces,
-        key3 = Triple(showingAllWorkspaces, sessionScopeId, expandedSectionIds)
+        emptyList<WorkspaceSessionListEntry>(),
+        sessions, workspaces, Triple(showingAllWorkspaces, sessionScopeId, expandedSectionIds), pins
     ) {
         val expandedIds = expandedSectionIds.toSet()
         value = withContext(Dispatchers.Default) {
             if (showingAllWorkspaces) {
-                allWorkspaceSessionEntries(sessions, workspaces, expandedIds)
+                allWorkspaceSessionEntries(sessions, workspaces, expandedIds, pins)
             } else {
                 recentWorkspaceSessionEntries(
-                    sessions, sessionScopeId, expandedIds
+                    sessions, sessionScopeId, expandedIds, pins
                 )
             }
         }
@@ -624,6 +632,9 @@ internal fun WorkspaceScreen(
                                 }
                                 is WorkspaceSessionListEntry.Session -> SessionListItem(
                                     session = entry.session,
+                                    isPinned = entry.isPinned,
+                                    canPin = stateHolder.canPinWorkspaceSession,
+                                    onTogglePin = { stateHolder.setWorkspaceSessionPinned(entry.session.id, !entry.isPinned) },
                                     folderLabel = if (showingAllWorkspaces) null else sessionFolderLabel(entry.session, sessionFolderLabels),
                                     onOpen = { id ->
                                         if (searchQuery.isNotBlank()) stateHolder.localChatMatches.firstOrNull { it.sessionId == id }
@@ -941,11 +952,16 @@ private fun sessionFolderLabel(session: SessionSummary, folderLabels: Map<String
 private fun SessionListItem(
     session: SessionSummary,
     folderLabel: String?,
+    isPinned: Boolean,
+    canPin: Boolean,
+    onTogglePin: () -> Unit,
     onOpen: (String) -> Unit,
     onRename: (String, String) -> Unit,
     onArchive: (String) -> Unit
 ) {
+    val context = LocalContext.current
     var menuVisible by remember { mutableStateOf(false) }
+    var pressOffset by remember { mutableStateOf<IntOffset?>(null) }
     var renaming by remember { mutableStateOf(false) }
     var archiving by remember { mutableStateOf(false) }
     var title by remember { mutableStateOf(session.title) }
@@ -954,12 +970,28 @@ private fun SessionListItem(
             SessionRow(
                 session,
                 folderLabel = folderLabel,
+                isPinned = isPinned,
                 onClick = { onOpen(session.id) },
-                onLongClick = { menuVisible = true }
+                onLongClick = { offset ->
+                    pressOffset = offset
+                    menuVisible = true
+                }
             )
             SessionContextMenu(
                 expanded = menuVisible,
+                pressOffset = pressOffset,
+                isPinned = isPinned,
+                canPin = canPin,
                 onDismissRequest = { menuVisible = false },
+                onCopyId = {
+                    menuVisible = false
+                    context.getSystemService(ClipboardManager::class.java)
+                        ?.setPrimaryClip(ClipData.newPlainText(appText("复制对话 ID"), session.id))
+                },
+                onTogglePin = {
+                    menuVisible = false
+                    onTogglePin()
+                },
                 onRename = {
                     title = session.title
                     menuVisible = false
@@ -1001,11 +1033,23 @@ private fun SessionListItem(
 private fun SessionRow(
     session: SessionSummary,
     folderLabel: String? = null,
+    isPinned: Boolean,
     onClick: () -> Unit,
-    onLongClick: () -> Unit
+    onLongClick: (IntOffset?) -> Unit
 ) {
+    var pressOffset by remember { mutableStateOf<IntOffset?>(null) }
     Row(
-        Modifier.fillMaxWidth().combinedClickable(onClick = onClick, onLongClick = onLongClick).padding(horizontal = 4.dp, vertical = 10.dp)
+        Modifier.fillMaxWidth().pointerInput(Unit) {
+            awaitEachGesture {
+                val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                pressOffset = IntOffset(down.position.x.roundToInt(), down.position.y.roundToInt())
+                do {
+                    val event = awaitPointerEvent(PointerEventPass.Final)
+                } while (event.changes.any { it.pressed })
+                pressOffset = null
+            }
+        }.combinedClickable(onClick = onClick, onLongClick = { onLongClick(pressOffset) })
+            .padding(horizontal = 4.dp, vertical = 10.dp)
             .testTag("workspace-session-${session.id}"),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(11.dp)
@@ -1017,15 +1061,21 @@ private fun SessionRow(
             glowing = session.isRunning
         )
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-            Text(
-                text = session.title,
-                color = Color.White,
-                fontSize = 15.sp,
-                lineHeight = 17.sp,
-                fontWeight = FontWeight.Medium,
-                maxLines = 1,
-                style = TextStyle(platformStyle = PlatformTextStyle(includeFontPadding = false))
-            )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                if (isPinned) {
+                    Image(painterResource(R.drawable.ic_session_pin), null, Modifier.size(12.dp),
+                        colorFilter = ColorFilter.tint(Color.White.copy(alpha = 0.62f)))
+                }
+                Text(
+                    text = session.title,
+                    color = Color.White,
+                    fontSize = 15.sp,
+                    lineHeight = 17.sp,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    style = TextStyle(platformStyle = PlatformTextStyle(includeFontPadding = false))
+                )
+            }
             Text(
                 text = folderLabel?.let { "$it · ${session.id.take(16)}" } ?: session.id.take(16),
                 color = Color.White.copy(alpha = 0.42f),

@@ -90,6 +90,7 @@ class AndroidSharedStateHolder(
         }
     }
 
+    private var botConversationTest: String? = null
     internal var botDesignPreview = false
         private set
     internal fun restoreBotDesignPreview(
@@ -105,6 +106,7 @@ class AndroidSharedStateHolder(
             preview?.optString("previewImageBase64")?.takeIf { it.isNotEmpty() }?.let { Base64.decode(it, Base64.DEFAULT) }
         }.getOrNull()
         botStore.restoreCacheJson(json)
+        botConversationTest = preview?.optString("conversationTest")?.takeIf { it.isNotBlank() }
         val activation = botStore.activate(supported = true, connected = connected)
         botSnapshot = activation.snapshot
         val state = preview?.optJSONObject("previewState") ?: if (showLiveWork) {
@@ -118,6 +120,12 @@ class AndroidSharedStateHolder(
                 val reply = org.json.JSONObject().put("kind", "bot-result").put("requestId", requestId)
                     .put("endpoint", "state").put("value", state)
                 botSnapshot = botStore.acceptJson(reply.toString()).snapshot
+            }
+        }
+        if (botConversationTest != null) {
+            activation.requests.firstOrNull { it.payload.contains("bot-subscribe") }?.correlationId?.let { id ->
+                botSnapshot = botStore.acceptJson(org.json.JSONObject().put("kind", "bot-subscribed").put("requestId", id)
+                    .put("hello", org.json.JSONObject().put("capabilities", org.json.JSONArray(listOf("bot-conversations", "bot-creation")))).toString()).snapshot
             }
         }
         if (errorCode != null) activation.requests.forEach { request ->
@@ -155,6 +163,16 @@ class AndroidSharedStateHolder(
 
     private val botFileSubmissions = mutableMapOf<String, List<String>>()
     private val selectedBotSessionId get() = botSnapshot.chats.firstOrNull { it.id == botSnapshot.selectedChatId }?.sessionId
+
+    internal fun beginBotConversation() = applyBotTransition(botStore.beginConversation())
+    internal fun searchConversationBots(query: String) = botStore.searchConversationBots(query)
+    internal fun openConversationBot(id: String) = applyBotTransition(botStore.openConversationBot(id))
+    internal fun toggleConversationMember(id: String) = applyBotTransition(botStore.toggleConversationMember(id))
+    internal fun updateConversationMessage(text: String) = applyBotTransition(botStore.updateConversationMessage(text))
+    internal fun createConversationRoom() = applyBotTransition(botStore.createConversationRoom())
+    internal fun retryConversationMessage() = applyBotTransition(botStore.retryConversationMessage())
+    internal fun confirmConversationNotCreated() = applyBotTransition(botStore.confirmConversationNotCreated())
+    internal fun enterCreatedConversation() = applyBotTransition(botStore.enterCreatedConversation())
 
     internal fun openBotCreation() = applyBotTransition(botStore.openCreation())
     internal fun loadBotCreationAgents() = applyBotTransition(botStore.loadCreationAgents())
@@ -212,7 +230,27 @@ class AndroidSharedStateHolder(
         val previousSession = selectedBotSessionId
         val previouslyWritable = botSnapshot.writable && botSnapshot.attachmentsSupported
         botSnapshot = transition.snapshot
-        if (botDesignPreview) return
+        if (botDesignPreview) {
+            if (botConversationTest != null) transition.requests.forEach { request ->
+                val body = runCatching { org.json.JSONObject(request.payload) }.getOrNull() ?: return@forEach
+                val endpoint = body.optString("endpoint")
+                val id = request.correlationId ?: return@forEach
+                if (endpoint in setOf("set-flags", "create-room", "send")) {
+                    val payload = body.optJSONObject("payload")
+                    val value = if (endpoint == "create-room") org.json.JSONObject().put("id", "created-room")
+                        .put("name", "大主管、研究员").put("members", payload?.optJSONArray("members")) // i18n-ignore: 隔离 UI 验收的主机样本
+                        else org.json.JSONObject().put("id", payload?.optString("id"))
+                    val reply = if (botConversationTest == "conversation-error") org.json.JSONObject().put("kind", "error")
+                        .put("requestId", id).put("code", "bot/test-failure").put("message", "主机暂时无法创建群聊") // i18n-ignore: 隔离 UI 验收的主机样本
+                        else org.json.JSONObject().put("kind", "bot-result").put("requestId", id).put("endpoint", endpoint).put("value", value)
+                    graph?.applicationScope?.launch {
+                        kotlinx.coroutines.delay(300)
+                        applyBotTransition(botStore.acceptJson(reply.toString()))
+                    }
+                }
+            }
+            return
+        }
         val allowsAttachments = botSnapshot.writable && botSnapshot.attachmentsSupported
         if (previousSession != selectedBotSessionId || previouslyWritable != allowsAttachments) {
             botFileUploads.select(selectedBotSessionId, allowsAttachments)
@@ -847,6 +885,9 @@ class AndroidSharedStateHolder(
             runCatching { GatewayWireDecoder.decode(payload) }
                 .onSuccess { frame ->
                     projectionActor.acceptFrameImmediate(payload, frame, frame.sessionId)
+                    if (frame.kind == "session-pins") frame.pinnedSessionIds?.let { ids ->
+                        gatewayState = gatewayState.copy(pinnedSessionIds = ids)
+                    }
                     if (!snapshot.selectedHistoryIsLoadingOlder && frame.kind in setOf("history", "error", "session-stream-reset")) {
                         frame.sessionId?.let { historyPagingSessionIds = historyPagingSessionIds - it }
                     }
@@ -2405,6 +2446,19 @@ class AndroidSharedStateHolder(
     }
 
     val gatewayLocalId: String get() = graph?.gatewayLocalId ?: "legacy"
+
+    val canPinWorkspaceSession: Boolean
+        get() = gatewayState.connection == GatewayConnectionState.CONNECTED && gatewayState.pinnedSessionIds != null
+
+    fun setWorkspaceSessionPinned(sessionId: String, pinned: Boolean) {
+        val appGraph = graph ?: return
+        if (!canPinWorkspaceSession) return
+        appGraph.gatewayScope.launch {
+            appGraph.gatewayRuntime.sendRequest(
+                GatewayRequests.setSessionPinned(sessionId, pinned, UUID.randomUUID().toString())
+            )
+        }
+    }
     val gatewayDisplayName: String get() = graph?.gatewayDisplayName.orEmpty()
 
     fun connect(connectionMethod: com.clarklevis.dsh.shared.gateway.GatewayConnectionMethod? = null) {
@@ -4172,6 +4226,7 @@ class AndroidSharedStateHolder(
                                         defaultConfigurationLoadingKinds =
                                             defaultConfigurationLoadingKinds - event.requestType
                                         clearWorkspaceRequestLoading(event.requestType)
+                                        if (event.requestType == "session-pin") platformError = appText("请求未完成，请重试")
                                         if (event.requestType == "history") {
                                             event.targetSessionId?.let {
                                                 historyPagingSessionIds = historyPagingSessionIds - it
@@ -4214,6 +4269,7 @@ class AndroidSharedStateHolder(
                                         ))
                                         handleSessionCancellationFailure(event.requestType, event.targetSessionId)
                                         if (event.requestType == "message") pendingMessageSubmission = null
+                                        if (event.requestType == "session-pin") platformError = appText("请求未完成，请重试")
                                         if (event.requestType == "queue-update") {
                                             queueState = queueStore.failPending(UiMessage.raw(appText("队列操作未完成，请检查最新状态后重试")))
                                             platformError = queueState.lastError?.let { appText(it) }
@@ -4312,7 +4368,8 @@ class AndroidSharedStateHolder(
         private val WORKSPACE_REQUEST_TYPES = setOf(
             "directories",
             "directory-create",
-            "workspace-create"
+            "workspace-create",
+            "session-pin"
         )
         private val SLASH_COMMAND_REQUEST_TYPES = setOf("commands", "command-options", "command-select")
         private val SLASH_COMMAND_FRAME_KINDS = setOf("commands", "command-options", "command-selected")

@@ -51,7 +51,7 @@
             android:launchMode="singleTask"
             android:exported="true"
             android:resizeableActivity="true"
-            android:screenOrientation="@integer/app_screen_orientation"
+            android:screenOrientation="portrait"
             android:theme="@style/Theme.DeepSeekHarness.Starting"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
@@ -70,7 +70,7 @@
             android:name=".ui.DshMarkdownTablePreviewActivity"
             android:exported="false"
             android:resizeableActivity="true"
-            android:screenOrientation="@integer/app_screen_orientation"
+            android:screenOrientation="portrait"
             android:theme="@style/Theme.DeepSeekHarness" />
         <service
             android:name=".GatewayConnectionService"

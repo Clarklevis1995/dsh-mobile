@@ -38,7 +38,8 @@ data class BotChat(
     val imageRef: String? = null,
     val memberIds: List<String> = emptyList(),
     val sessionId: String? = null,
-    val profile: BotRoleProfile? = null
+    val profile: BotRoleProfile? = null,
+    val hidden: Boolean = false
 )
 
 @Serializable
@@ -140,6 +141,22 @@ data class BotReferenceSearch(
     val unavailable: Boolean = false
 )
 
+/** 新会话与群聊共用的有序草稿；未知提交结果不自动重试。 */
+@Serializable
+data class BotConversationState(
+    val supported: Boolean = false,
+    val memberIds: List<String> = emptyList(),
+    val message: String = "",
+    val saving: Boolean = false,
+    val error: String? = null,
+    val errorDetail: String? = null,
+    val uncertain: Boolean = false,
+    val createdId: String? = null,
+    val openedId: String? = null
+) {
+    val adminId: String? get() = memberIds.firstOrNull()
+}
+
 @Serializable
 data class SharedBotSnapshot(
     val connected: Boolean = false,
@@ -177,6 +194,7 @@ data class SharedBotSnapshot(
     val creation: BotCreationState = BotCreationState(),
     val creationModels: List<BotRoleOption> = emptyList(),
     val defaultCreationModel: String? = null,
+    val conversation: BotConversationState = BotConversationState(),
     val rosterIds: List<String> = emptyList(),
     val mainBotIds: List<String> = emptyList(),
     val botDeletionSupported: Boolean = false,
@@ -240,6 +258,7 @@ class SharedBotStore {
     private var stateDirty = false
     private var subscription: String? = null
     private val pending = linkedMapOf<String, Pending>()
+    private var conversationSend: String? = null
     private val histories = linkedMapOf<String, List<BotChatMessage>>()
     private var projectedHistorySource: List<BotChatMessage> = emptyList()
     private var projectedHistory: List<BotChatMessage> = emptyList()
@@ -259,9 +278,11 @@ class SharedBotStore {
 
     fun searchChats(query: String): List<BotChat> {
         val term = query.trim()
-        if (term.isEmpty()) return state.chats.filter { it.id != state.mainBotId }
+        // hidden 仅隐藏聊天入口，群成员、头像和角色管理仍需完整团队数据。
+        val visible = state.chats.filter { !it.hidden || (!it.room && state.isMainBot(it.id)) }
+        if (term.isEmpty()) return visible.filter { it.id != state.mainBotId }
 
-        return state.chats.filter { chat ->
+        return visible.filter { chat ->
             chat.name.contains(term, ignoreCase = true) || chat.preview.contains(term, ignoreCase = true) ||
                 histories[chat.id].orEmpty().any { message ->
                     (message.kind == "user" || message.kind == "bot" || message.kind == "post") &&
@@ -276,7 +297,7 @@ class SharedBotStore {
             feedActive = false, selectedChatId = null, messages = emptyList(), interactions = emptyList(), error = null,
             roleSaving = false, roleDetails = null, roleError = null, effortModel = null, efforts = emptyList(),
             roleSettingsSupported = false, attachmentsSupported = false, attachmentSending = false, lastAttachmentAck = null,
-            referencesSupported = false, referenceSearch = null, botDeletionSupported = false, liveWork = emptyMap(), creation = BotCreationState())
+            referencesSupported = false, referenceSearch = null, botDeletionSupported = false, liveWork = emptyMap(), creation = BotCreationState(), conversation = BotConversationState())
         val uncertain = optimistic.mapValues { (_, messages) -> messages.map { it.copy(delivery = "unknown") } }
         val cache = BotCache(snapshot = cached, histories = pages, optimistic = uncertain,
             noticeBoot = boot, noticeSeq = noticeSeq, readThrough = readThrough.toMap())
@@ -317,6 +338,10 @@ class SharedBotStore {
         state = state.copy(supported = supported, connected = connected)
         if (!connected) {
             val deletionUnconfirmed = pending.values.any { it.endpoint == "delete-bot" }
+            conversationSend = null
+            state = state.copy(conversation = state.conversation.copy(supported = false, saving = false,
+                uncertain = state.conversation.uncertain || state.conversation.saving,
+                error = if (state.conversation.saving) "uncertain" else state.conversation.error))
             markUncertain()
             pending.clear()
             referenceRequest = null
@@ -351,6 +376,96 @@ class SharedBotStore {
         if (foreground) markChatRead(id)
         if (id != null && state.connected && state.supported) readChat(id)
         return result()
+    }
+
+    fun searchConversationBots(query: String): List<BotChat> {
+        val term = query.trim()
+        return state.roster.filter { term.isEmpty() || it.name.contains(term, true) || it.role.contains(term, true) }
+    }
+
+    fun beginConversation(): SharedBotTransition {
+        val draft = state.conversation
+        if (!draft.saving) state = state.copy(conversation = if (draft.createdId != null || draft.openedId != null)
+            BotConversationState(supported = draft.supported) else draft.copy(error = if (draft.uncertain) "uncertain" else null,
+                errorDetail = if (draft.uncertain) draft.errorDetail else null))
+        return result()
+    }
+
+    fun toggleConversationMember(id: String): SharedBotTransition {
+        val draft = state.conversation
+        if (draft.saving || draft.createdId != null || draft.uncertain || state.roster.none { it.id == id }) return result()
+        val members = if (id in draft.memberIds) draft.memberIds - id else draft.memberIds + id
+        state = state.copy(conversation = draft.copy(memberIds = members, error = null, errorDetail = null))
+        return result()
+    }
+
+    fun updateConversationMessage(text: String): SharedBotTransition {
+        if (!state.conversation.saving && state.conversation.createdId == null && !state.conversation.uncertain && text.length <= 100_000)
+            state = state.copy(conversation = state.conversation.copy(message = text))
+        return result()
+    }
+
+    fun openConversationBot(id: String): SharedBotTransition {
+        val bot = state.roster.firstOrNull { it.id == id } ?: return result()
+        if (state.conversation.saving) return result()
+        if (bot.hidden) {
+            if (!canWriteConversation()) return result()
+            if (call("set-flags", buildJsonObject { put("id", id); put("hidden", false) }, id) != null)
+                state = state.copy(conversation = state.conversation.copy(saving = true, error = null, errorDetail = null))
+        } else state = state.copy(conversation = state.conversation.copy(openedId = id))
+        return result()
+    }
+
+    fun createConversationRoom(): SharedBotTransition {
+        val draft = state.conversation
+        if (!canWriteConversation() || draft.saving || draft.uncertain || draft.createdId != null ||
+            draft.memberIds.distinct().size < 2 || draft.memberIds.any { id -> state.roster.none { it.id == id } }) return result()
+        if (call("create-room", buildJsonObject {
+            put("members", JsonArray(draft.memberIds.map(::JsonPrimitive)))
+            put("admin", requireNotNull(draft.adminId))
+            if (draft.message.isBlank()) put("greet", true)
+        }) != null) state = state.copy(conversation = draft.copy(saving = true, error = null, errorDetail = null))
+        return result()
+    }
+
+    /** 群已创建后仅重试首条消息，绝不重新建群。 */
+    fun retryConversationMessage(): SharedBotTransition {
+        if (canWriteConversation() && !state.conversation.saving && !state.conversation.uncertain)
+            sendConversationMessage()
+        return result()
+    }
+
+    /** 只有用户核对聊天列表后，才能解除未知建群结果的防重复保护。 */
+    fun confirmConversationNotCreated(): SharedBotTransition {
+        val draft = state.conversation
+        if (!draft.saving && draft.uncertain && draft.createdId == null)
+            state = state.copy(conversation = draft.copy(uncertain = false, error = null, errorDetail = null))
+        return result()
+    }
+
+    fun enterCreatedConversation(): SharedBotTransition {
+        if (!state.conversation.saving) state = state.copy(conversation = state.conversation.copy(openedId = state.conversation.createdId))
+        return result()
+    }
+
+    private fun refreshConversationState() {
+        // 创建前发出的 state 快照不能覆盖刚创建的群或刚恢复的可见性。
+        pending.entries.removeAll { it.value.endpoint == "state" }
+        revision = -1
+        stateDirty = false
+        readState()
+    }
+
+    private fun canWriteConversation(): Boolean = state.connected && state.supported && state.writable && state.conversation.supported
+
+    private fun sendConversationMessage() {
+        val draft = state.conversation
+        val room = draft.createdId ?: return
+        conversationSend = call("send", buildJsonObject { put("sessionId", room); put("text", draft.message.trim()) }, room)
+        state = state.copy(conversation = draft.copy(saving = conversationSend != null,
+            error = if (conversationSend == null) "busy" else null, errorDetail = null))
+        conversationSend?.let { request -> optimistic[room] = optimistic[room].orEmpty() +
+            BotChatMessage(request, "user", draft.message.trim(), delivery = "sending") }
     }
 
     fun setForeground(active: Boolean): SharedBotTransition {
@@ -638,7 +753,8 @@ class SharedBotStore {
                     attachmentsSupported = "bot-attachments" in capabilities,
                     referencesSupported = "reference-candidates" in capabilities,
                     botDeletionSupported = "bot-deletion" in capabilities,
-                    creation = state.creation.copy(supported = "bot-creation" in capabilities))
+                    creation = state.creation.copy(supported = "bot-creation" in capabilities),
+                    conversation = state.conversation.copy(supported = "bot-conversations" in capabilities))
             }
             "bot-stream-reset" -> if (frame.text("subscriptionId") == subscription) {
                 subscription = null
@@ -655,7 +771,7 @@ class SharedBotStore {
                 if (frame.text("endpoint") != request.endpoint) return result()
                 reply(id, request, frame["value"])
             }
-            "error" -> frame.text("requestId")?.let { failed(it, frame.text("code") ?: "bot-request-failed") }
+            "error" -> frame.text("requestId")?.let { failed(it, frame.text("code") ?: "bot-request-failed", frame.text("message")) }
         }
         loadAvatars()
         return result()
@@ -753,6 +869,10 @@ class SharedBotStore {
                         memoryAvailable = obj["memory"] != JsonPrimitive(false),
                         computerEnabled = (obj["computer"] as? JsonObject)?.get("enabled")?.jsonPrimitive?.booleanOrNull == true,
                         writable = obj["readOnly"].let { it == null || it == JsonNull || it == JsonPrimitive(false) })
+                    if (!state.conversation.saving && state.conversation.createdId == null && !state.conversation.uncertain) {
+                        val members = state.conversation.memberIds.filter { id -> peers.any { it.id == id && !it.room } }
+                        state = state.copy(conversation = state.conversation.copy(memberIds = members))
+                    }
                     wantedAvatars.clear()
                     for (entry in obj.array("bots")) {
                         val bot = entry as? JsonObject ?: continue
@@ -860,6 +980,25 @@ class SharedBotStore {
                     creation { it.copy(loadingPhotos = true) }
                 }
             }
+            "set-flags" -> {
+                val bot = request.chatId ?: return
+                state = state.copy(chats = state.chats.map { if (it.id == bot) it.copy(hidden = false) else it },
+                    conversation = state.conversation.copy(saving = false, error = null, openedId = bot))
+                refreshConversationState()
+            }
+            "create-room" -> {
+                val room = peer(obj, true, emptyMap())?.takeIf { it.id.isNotBlank() }
+                if (room == null) {
+                    state = state.copy(conversation = state.conversation.copy(saving = false, uncertain = true, error = "uncertain"))
+                } else {
+                    val draft = state.conversation
+                    state = state.copy(chats = state.chats.filterNot { it.id == room.id } + room,
+                        conversation = draft.copy(createdId = room.id, saving = false))
+                    if (draft.message.isBlank()) state = state.copy(conversation = state.conversation.copy(openedId = room.id))
+                    else sendConversationMessage()
+                }
+                refreshConversationState()
+            }
             "create-bot" -> {
                 val created = obj.text("id")
                 creation { it.copy(saving = false, createdId = created, error = if (created == null) "uncertain" else null) }
@@ -936,6 +1075,10 @@ class SharedBotStore {
             }
             "send", "send-attachments" -> {
                 val chat = request.chatId ?: return
+                if (id == conversationSend) {
+                    conversationSend = null
+                    state = state.copy(conversation = state.conversation.copy(saving = false, openedId = chat, error = null))
+                }
                 if (request.endpoint == "send-attachments") state = state.copy(lastAttachmentAck = id)
                 optimistic[chat] = optimistic[chat].orEmpty().map { if (it.id == id) it.copy(delivery = "sent") else it }
                 readChat(chat)
@@ -1119,7 +1262,6 @@ class SharedBotStore {
 
     private fun peer(value: JsonElement, room: Boolean, running: Map<String, JsonElement>): BotChat? {
         val obj = value as? JsonObject ?: return null
-        if (obj["hidden"]?.jsonPrimitive?.booleanOrNull == true) return null
         val id = obj.text("id") ?: return null
         val previous = state.chats.firstOrNull { it.id == id }
         val work = running[id]
@@ -1136,7 +1278,8 @@ class SharedBotStore {
             obj.text("sessionId"),
             if (room) null else BotRoleProfile(obj.text("instructions").orEmpty(), obj.text("model"),
                 obj.text("effort"), obj.text("workDir"), obj.text("permission"),
-                obj["private"]?.jsonPrimitive?.booleanOrNull == true, obj.text("appliedModel"), obj.text("appliedEffort")))
+                obj["private"]?.jsonPrimitive?.booleanOrNull == true, obj.text("appliedModel"), obj.text("appliedEffort")),
+            hidden = obj["hidden"]?.jsonPrimitive?.booleanOrNull == true)
     }
 
     private fun loadAvatars() {
@@ -1234,8 +1377,22 @@ class SharedBotStore {
         call("schedules")
     }
 
-    private fun failed(id: String, code: String) {
+    private fun failed(id: String, code: String, detail: String? = null) {
         val request = pending.remove(id) ?: return
+        if (request.endpoint in setOf("create-room", "set-flags") || id == conversationSend) {
+            val uncertain = code in setOf("bot-timeout", "request-timeout", "timeout", "disconnected", "connection-lost", "not-connected", "bot-invalid-response")
+            if (id == conversationSend) {
+                conversationSend = null
+                request.chatId?.let { chat -> optimistic[chat] = optimistic[chat].orEmpty().map {
+                    if (it.id == id) it.copy(delivery = "unknown") else it
+                }.filterNot { !uncertain && it.id == id } }
+            }
+            state = state.copy(conversation = state.conversation.copy(saving = false, error = if (uncertain) "uncertain" else code,
+                errorDetail = detail?.take(1000), uncertain = uncertain && request.endpoint != "set-flags"))
+            revision = -1
+            if (state.connected) readState()
+            return
+        }
         if (id == subscription) subscription = null
         if (request.endpoint == "avatar") { loadAvatars(); return }
         if (request.endpoint == "reference-candidates") { finishReferences(id, null); return }

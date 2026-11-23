@@ -257,6 +257,7 @@ struct GatewayFrame: Codable, Sendable {
     var view: String?
     var query: String?
     var archivedSessionIds: [String]?
+    var pinnedSessionIds: [String]?
     var workspace: GatewayWorkspace?
     var created: Bool?
     var version: String?

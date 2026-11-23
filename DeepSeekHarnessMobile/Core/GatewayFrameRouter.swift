@@ -60,6 +60,7 @@ enum GatewayContentRoute {
     case liveEvent(SessionEvent)
     case workspaces([GatewayWorkspace], archivedSessionIDs: Set<String>?)
     case sessionArchives(Set<String>)
+    case sessionPins([String])
     case sessionTitle(sessionID: String, title: String, sequence: Int, time: Double?)
     case sessions([GatewaySessionSummary])
     case history(GatewayHistoryPayload)
@@ -185,6 +186,11 @@ enum GatewayFrameRouter {
         case "session-archives", "session-archived":
             guard let ids = frame.archivedSessionIds else { return .ignored }
             return .content(.sessionArchives(Set(ids)))
+        case "session-pins":
+            guard let ids = frame.pinnedSessionIds else { return .ignored }
+            return .content(.sessionPins(ids))
+        case "session-pin-set":
+            return .ignored
         case "session-title-changed", "session-renamed":
             guard let id = frame.sessionId, !id.isEmpty,
                   let title = frame.title, !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,

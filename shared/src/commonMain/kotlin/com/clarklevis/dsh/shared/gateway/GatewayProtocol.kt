@@ -251,6 +251,15 @@ object GatewayRequests {
         "session-archive", "session-archived", targetSessionId = sessionId
     ) { put("sessionId", sessionId) }
 
+    fun setSessionPinned(sessionId: String, pinned: Boolean, requestId: String): GatewayRequest = request(
+        "session-pin", "session-pin-set", targetSessionId = sessionId, correlationId = requestId,
+        lanePolicy = GatewayRequestLanePolicy.FIFO
+    ) {
+        put("sessionId", sessionId)
+        put("pinned", pinned)
+        put("requestId", requestId)
+    }
+
     fun renameSession(sessionId: String, title: String): GatewayRequest = request(
         "session-rename", "session-renamed", targetSessionId = sessionId
     ) {

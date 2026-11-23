@@ -1,3276 +1,13 @@
 {
   "sourceLanguage" : "zh-Hans",
   "strings" : {
-    "· %lld 秒": {
-      "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "· %llds" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "· %lld 秒" } }
-      }
-    },
-    "上网搜索…": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Searching online…"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "上网搜索…"
-          }
-        }
-      }
-    },
-    "正在浏览网页…": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Reading a webpage…"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "正在浏览网页…"
-          }
-        }
-      }
-    },
-    "正在生成图片…": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Generating an image…"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "正在生成图片…"
-          }
-        }
-      }
-    },
-    "正在切换工作文件夹…": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Switching working folders…"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "正在切换工作文件夹…"
-          }
-        }
-      }
-    },
-    "正在思考…": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Thinking…"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "正在思考…"
-          }
-        }
-      }
-    },
-    "正在处理…": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Working…"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "正在处理…"
-          }
-        }
-      }
-    },
-    "删除 Bot": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Delete Bot"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "删除 Bot"
-          }
-        }
-      }
-    },
-    "删除 Bot？": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Delete Bot?"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "删除 Bot？"
-          }
-        }
-      }
-    },
-    "将“%@”移出团队和所在群聊。": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Remove “%@” from the team and its group chats."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "将“%@”移出团队和所在群聊。"
-          }
-        }
-      }
-    },
-    "主 Bot 不能删除。": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Main Bots cannot be deleted."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "主 Bot 不能删除。"
-          }
-        }
-      }
-    },
-    "暂时无法删除此 Bot，请稍后重试。": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Couldn’t delete this Bot. Try again later."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "暂时无法删除此 Bot，请稍后重试。"
-          }
-        }
-      }
-    },
-    "尚未确认删除结果，请重新同步后核对。": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Deletion hasn’t been confirmed. Sync again to check."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "尚未确认删除结果，请重新同步后核对。"
-          }
-        }
-      }
-    },
-    "标签为选填，会显示在 Bot 名字下方。": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The label is optional and appears below the Bot’s name."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "标签为选填，会显示在 Bot 名字下方。"
-          }
-        }
-      }
-    },
-    "模型更改从下一条消息开始生效。": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Model changes take effect with the next message."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "模型更改从下一条消息开始生效。"
-          }
-        }
-      }
-    },
-    "这段说明会写入 Bot 的系统提示词。": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "This description is included in the Bot’s system prompt."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "这段说明会写入 Bot 的系统提示词。"
-          }
-        }
-      }
-    },
-    "各 Bot 的电脑操控授权可在 DS Bot 网页端管理。": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Manage each Bot’s computer control permissions in DS Bot on the web."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "各 Bot 的电脑操控授权可在 DS Bot 网页端管理。"
-          }
-        }
-      }
-    },
-    "主 Bot 可以创建和修改团队 Bot，并管理群聊。": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The main Bot can create and edit team Bots and manage group chats."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "主 Bot 可以创建和修改团队 Bot，并管理群聊。"
-          }
-        }
-      }
-    },
-    "我的 Bot": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "My Bots"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "我的 Bot"
-          }
-        }
-      }
-    },
-    "查看与创建": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "View and create"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "查看与创建"
-          }
-        }
-      }
-    },
-    "新建 Bot": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "New Bot"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "新建 Bot"
-          }
-        }
-      }
-    },
-    "团队成员": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Team members"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "团队成员"
-          }
-        }
-      }
-    },
-    "%lld 个 Bot": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld bots"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld 个 Bot"
-          }
-        }
-      }
-    },
-    "连接主机后可以创建 Bot": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Connect to a host to create a Bot"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "连接主机后可以创建 Bot"
-          }
-        }
-      }
-    },
-    "当前主机为只读": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "This host is read-only"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "当前主机为只读"
-          }
-        }
-      }
-    },
-    "请更新主机上的移动网关和 DS Bot 后再创建 Bot": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Update Mobile Gateway and DS Bot on the host to create a Bot"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "请更新主机上的移动网关和 DS Bot 后再创建 Bot"
-          }
-        }
-      }
-    },
-    "还没有 Bot": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "No Bots yet"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "还没有 Bot"
-          }
-        }
-      }
-    },
-    "新 Bot": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "New Bot"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "新 Bot"
-          }
-        }
-      }
-    },
-    "返回": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Back"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "返回"
-          }
-        }
-      }
-    },
-    "形象": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Appearance"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "形象"
-          }
-        }
-      }
-    },
-    "使用 %@ 形象": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Use the %@ appearance"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "使用 %@ 形象"
-          }
-        }
-      }
-    },
-    "使用自定义形象": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Use a custom appearance"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "使用自定义形象"
-          }
-        }
-      }
-    },
-    "使用自动分配的形象": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Use an automatically assigned appearance"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "使用自动分配的形象"
-          }
-        }
-      }
-    },
-    "留空会使用自动生成的名字。": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Leave blank to use a generated name."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "留空会使用自动生成的名字。"
-          }
-        }
-      }
-    },
-    "已经有一个同名 Bot。": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "A Bot already has this name."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "已经有一个同名 Bot。"
-          }
-        }
-      }
-    },
-    "名字最多 40 个字符。": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Use 40 characters or fewer."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "名字最多 40 个字符。"
-          }
-        }
-      }
-    },
-    "这个名字在群聊中有保留用途。": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "This name is reserved in group chats."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "这个名字在群聊中有保留用途。"
-          }
-        }
-      }
-    },
-    "名字不能包含 @、反引号或控制字符。": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The name cannot contain @, backticks, or control characters."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "名字不能包含 @、反引号或控制字符。"
-          }
-        }
-      }
-    },
-    "DS Bot 模型": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "DS Bot model"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "DS Bot 模型"
-          }
-        }
-      }
-    },
-    "本地 Agent": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Local Agent"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "本地 Agent"
-          }
-        }
-      }
-    },
-    "无法读取本地 Agent": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Unable to load local Agents"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "无法读取本地 Agent"
-          }
-        }
-      }
-    },
-    "未发现本地 Agent": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "No local Agents found"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "未发现本地 Agent"
-          }
-        }
-      }
-    },
-    "未登录": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Signed out"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "未登录"
-          }
-        }
-      }
-    },
-    "已登录": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Signed in"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "已登录"
-          }
-        }
-      }
-    },
-    "可用": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Available"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "可用"
-          }
-        }
-      }
-    },
-    "请选择主机上可用的 Agent。": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Choose an available Agent on the host."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "请选择主机上可用的 Agent。"
-          }
-        }
-      }
-    },
-    "所选模型": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Selected model"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "所选模型"
-          }
-        }
-      }
-    },
-    "沿用 %@ 的默认模型。": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Use the default model for %@."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "沿用 %@ 的默认模型。"
-          }
-        }
-      }
-    },
-    "沿用主机预选模型，可在 Bot 详情中修改。": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Use the host’s preferred model. You can change it in Bot settings."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "沿用主机预选模型，可在 Bot 详情中修改。"
-          }
-        }
-      }
-    },
-    "暂时无法确认创建结果，请返回列表查看。": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Couldn’t confirm the result. Check the Bot list before trying again."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "暂时无法确认创建结果，请返回列表查看。"
-          }
-        }
-      }
-    },
-    "创建 Bot 失败，请检查主机连接和设置后重试。": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Couldn’t create the Bot. Check the host connection and settings, then retry."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "创建 Bot 失败，请检查主机连接和设置后重试。"
-          }
-        }
-      }
-    },
-    "创建 Bot": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Create Bot"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "创建 Bot"
-          }
-        }
-      }
-    },
-    "选择模型": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Choose model"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "选择模型"
-          }
-        }
-      }
-    },
-    "可用模型": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Available models"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "可用模型"
-          }
-        }
-      }
-    },
-    "CLI 默认": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "CLI default"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "CLI 默认"
-          }
-        }
-      }
-    },
-    "系统默认": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "System default"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "系统默认"
-          }
-        }
-      }
-    },
-    "已选": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Selected"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "已选"
-          }
-        }
-      }
-    },
-    "选择": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Select"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "选择"
-          }
-        }
-      }
-    },
-    "主机暂无可选模型": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The host has no available models"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "主机暂无可选模型"
-          }
-        }
-      }
-    },
-    "思考强度": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Thinking effort"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "思考强度"
-          }
-        }
-      }
-    },
-    "主机会提供模型和它所支持的思考强度。": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The host provides models and their supported effort levels."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "主机会提供模型和它所支持的思考强度。"
-          }
-        }
-      }
-    },
-    "编辑形象": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Edit appearance"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "编辑形象"
-          }
-        }
-      }
-    },
-    "形状": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Shape"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "形状"
-          }
-        }
-      }
-    },
-    "颜色": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Color"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "颜色"
-          }
-        }
-      }
-    },
-    "随机": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Shuffle"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "随机"
-          }
-        }
-      }
-    },
-    "上传照片": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Upload photo"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "上传照片"
-          }
-        }
-      }
-    },
-    "头像库": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Avatar library"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "头像库"
-          }
-        }
-      }
-    },
-    "无法读取或处理所选照片。": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Couldn’t read or process the selected photo."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "无法读取或处理所选照片。"
-          }
-        }
-      }
-    },
-    "导入照片": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Import photo"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "导入照片"
-          }
-        }
-      }
-    },
-    "头像库操作失败": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Avatar library request failed"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "头像库操作失败"
-          }
-        }
-      }
-    },
-    "头像库还没有照片。": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "No photos in the avatar library yet."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "头像库还没有照片。"
-          }
-        }
-      }
-    },
-    "加载更多": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Load more"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "加载更多"
-          }
-        }
-      }
-    },
-    "运行方式": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Run mode"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "运行方式"
-          }
-        }
-      }
-    },
-    "决定由 DS Bot 模型还是电脑上的本地代理处理消息。可在 DS Bot 网页端查看或更换。": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Choose whether messages are handled by a DS Bot model or a local agent on your computer. View or change this setting in DS Bot on the web."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "决定由 DS Bot 模型还是电脑上的本地代理处理消息。可在 DS Bot 网页端查看或更换。"
-          }
-        }
-      }
-    },
-    "选填，会显示在 Bot 名字下方。": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Optional. Appears below the Bot’s name."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "选填，会显示在 Bot 名字下方。"
-          }
-        }
-      }
-    },
-    "选择此 Bot 回复消息使用的模型。更改从下一条消息开始生效。": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Choose the model this Bot uses to reply. Changes apply from the next message."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "选择此 Bot 回复消息使用的模型。更改从下一条消息开始生效。"
-          }
-        }
-      }
-    },
-    "调整模型投入的推理量。可选档位取决于模型。": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Adjust how much reasoning the model does. Available levels depend on the model."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "调整模型投入的推理量。可选档位取决于模型。"
-          }
-        }
-      }
-    },
-    "设置此 Bot 的默认工作目录。留空时使用团队的总工作区。": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Set this Bot’s default working folder. Leave it blank to use the team workspace."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "设置此 Bot 的默认工作目录。留空时使用团队的总工作区。"
-          }
-        }
-      }
-    },
-    "控制 Bot 能否修改文件和可修改的范围。默认权限由主机决定。": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Control whether the Bot can edit files and where it can make changes. The host sets the default permissions."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "控制 Bot 能否修改文件和可修改的范围。默认权限由主机决定。"
-          }
-        }
-      }
-    },
-    "仅允许读取文件。": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Allows the Bot to read files only."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "仅允许读取文件。"
-          }
-        }
-      }
-    },
-    "允许在工作区内修改文件。": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Allows the Bot to edit files inside the workspace."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "允许在工作区内修改文件。"
-          }
-        }
-      }
-    },
-    "允许修改工作区以外的文件，范围仍受主机系统权限限制。": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Allows the Bot to edit files outside the workspace, within the host system’s permissions."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "允许修改工作区以外的文件，范围仍受主机系统权限限制。"
-          }
-        }
-      }
-    },
-    "主 Bot 不能开启隐私。": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The main Bot cannot be private."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "主 Bot 不能开启隐私。"
-          }
-        }
-      }
-    },
-    "将此 Bot 移出所有群聊后，才能开启隐私。": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Remove this Bot from all group chats before turning on privacy."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "将此 Bot 移出所有群聊后，才能开启隐私。"
-          }
-        }
-      }
-    },
-    "开启隐私前，请为此 Bot 设置独立的工作文件夹。": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Give this Bot its own working folder before turning on privacy."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "开启隐私前，请为此 Bot 设置独立的工作文件夹。"
-          }
-        }
-      }
-    },
-    "开启后，其他 Bot 无法读取它的工作文件夹、记忆和对话。向其他 Bot 分享内容需你批准。": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "When privacy is on, other Bots cannot read this Bot’s working folder, memory, or chats. Sharing with other Bots requires your approval."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "开启后，其他 Bot 无法读取它的工作文件夹、记忆和对话。向其他 Bot 分享内容需你批准。"
-          }
-        }
-      }
-    },
-    "这个 Bot 做什么": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "What this Bot does"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "这个 Bot 做什么"
-          }
-        }
-      }
-    },
-    "描述 Bot 在团队里的分工。这段说明会写入 Bot 的系统提示词。": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Describe this Bot’s role on the team. These instructions are included in its system prompt."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "描述 Bot 在团队里的分工。这段说明会写入 Bot 的系统提示词。"
-          }
-        }
-      }
-    },
-    "这个 Bot 负责什么…": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "What is this Bot responsible for…"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "这个 Bot 负责什么…"
-          }
-        }
-      }
-    },
-    "显示主机的电脑操控开关状态。每个 Bot 的授权可在 DS Bot 网页端管理。": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Shows whether computer control is enabled on the host. Manage each Bot’s access in DS Bot on the web."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "显示主机的电脑操控开关状态。每个 Bot 的授权可在 DS Bot 网页端管理。"
-          }
-        }
-      }
-    },
-    "管理 Bot 保存的信息，这些信息可用于后续对话。": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Manage information saved by the Bot for use in future conversations."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "管理 Bot 保存的信息，这些信息可用于后续对话。"
-          }
-        }
-      }
-    },
-    "查看或管理此 Bot 按时间自动执行的任务。": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "View or manage tasks this Bot runs automatically on a schedule."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "查看或管理此 Bot 按时间自动执行的任务。"
-          }
-        }
-      }
-    },
-    "主 Bot 可以创建和修改团队 Bot，并管理群聊。可在此将主 Bot 交给其他成员。": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The main Bot can create and edit team Bots and manage group chats. Transfer this role to another member here."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "主 Bot 可以创建和修改团队 Bot，并管理群聊。可在此将主 Bot 交给其他成员。"
-          }
-        }
-      }
-    },
-    "复制分工和模型，新 Bot 从空白记忆开始。": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Copies the role and model. The new Bot starts with an empty memory."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "复制分工和模型，新 Bot 从空白记忆开始。"
-          }
-        }
-      }
-    },
-    "文件与文件夹": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Files and folders"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "文件与文件夹"
-          }
-        }
-      }
-    },
-    "所有人": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Everyone"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "所有人"
-          }
-        }
-      }
-    },
-    "展开文件夹": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Browse folder"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "展开文件夹"
-          }
-        }
-      }
-    },
-    "暂时无法读取引用": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Could not load references"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "暂时无法读取引用"
-          }
-        }
-      }
-    },
-    "没有匹配的引用": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "No matching references"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "没有匹配的引用"
-          }
-        }
-      }
-    },
-    "一次最多添加 20 个附件，请等待已有附件准备完成": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "You can add up to 20 attachments. Wait for the current files to finish preparing."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "一次最多添加 20 个附件，请等待已有附件准备完成"
-          }
-        }
-      }
-    },
-    "主 Bot": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Main Bot"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "主 Bot"
-          }
-        }
-      }
-    },
-    "任务名称": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Task name"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "任务名称"
-          }
-        }
-      }
-    },
-    "分": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Minute"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "分"
-          }
-        }
-      }
-    },
-    "删除这个定时任务？": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Delete this scheduled task?"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "删除这个定时任务？"
-          }
-        }
-      }
-    },
-    "删除这条记忆？": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Delete this memory?"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "删除这条记忆？"
-          }
-        }
-      }
-    },
-    "名字": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Name"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "名字"
-          }
-        }
-      }
-    },
-    "图片总大小超出限制": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The selected images exceed the combined size limit"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "图片总大小超出限制"
-          }
-        }
-      }
-    },
-    "复制一份": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Duplicate"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "复制一份"
-          }
-        }
-      }
-    },
-    "复制这个角色？": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Duplicate this Bot?"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "复制这个角色？"
-          }
-        }
-      }
-    },
-    "工作区与权限": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Workspace and permissions"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "工作区与权限"
-          }
-        }
-      }
-    },
-    "工作文件夹": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Working folder"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "工作文件夹"
-          }
-        }
-      }
-    },
-    "已关闭": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Off"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "已关闭"
-          }
-        }
-      }
-    },
-    "总工作区": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Team workspace"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "总工作区"
-          }
-        }
-      }
-    },
-    "推理强度": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Reasoning effort"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "推理强度"
-          }
-        }
-      }
-    },
-    "操控": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Control"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "操控"
-          }
-        }
-      }
-    },
-    "新建定时任务": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "New scheduled task"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "新建定时任务"
-          }
-        }
-      }
-    },
-    "无法处理图片": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Couldn’t process the image"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "无法处理图片"
-          }
-        }
-      }
-    },
-    "时": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Hour"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "时"
-          }
-        }
-      }
-    },
-    "更换主 Bot": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Change main Bot"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "更换主 Bot"
-          }
-        }
-      }
-    },
-    "更换主 Bot？": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Change the main Bot?"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "更换主 Bot？"
-          }
-        }
-      }
-    },
-    "标签": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Role label"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "标签"
-          }
-        }
-      }
-    },
-    "模型": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Model"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "模型"
-          }
-        }
-      }
-    },
-    "正在处理图片…": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Preparing images…"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "正在处理图片…"
-          }
-        }
-      }
-    },
-    "每天运行时间": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Daily run time"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "每天运行时间"
-          }
-        }
-      }
-    },
-    "添加记忆": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Add memory"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "添加记忆"
-          }
-        }
-      }
-    },
-    "电脑操控": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Computer control"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "电脑操控"
-          }
-        }
-      }
-    },
-    "确认授予完全权限？": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Grant full access?"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "确认授予完全权限？"
-          }
-        }
-      }
-    },
-    "移除": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Remove"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "移除"
-          }
-        }
-      }
-    },
-    "管理": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Manage"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "管理"
-          }
-        }
-      }
-    },
-    "编辑记忆": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Edit memory"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "编辑记忆"
-          }
-        }
-      }
-    },
-    "群成员": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Group members"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "群成员"
-          }
-        }
-      }
-    },
-    "角色设置": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Bot settings"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "角色设置"
-          }
-        }
-      }
-    },
-    "记忆": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Memory"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "记忆"
-          }
-        }
-      }
-    },
-    "说明": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Instructions"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "说明"
-          }
-        }
-      }
-    },
-    "资料": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Profile"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "资料"
-          }
-        }
-      }
-    },
-    "近 30 天用量": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Usage in the last 30 days"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "近 30 天用量"
-          }
-        }
-      }
-    },
-    "还没有记忆": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "No memories yet"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "还没有记忆"
-          }
-        }
-      }
-    },
-    "隐私": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Privacy"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "隐私"
-          }
-        }
-      }
-    },
-    "默认": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Default"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "默认"
-          }
-        }
-      }
-    },
-    "conversation.time.dateWeekday": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "EEE, MMM d, H:mm"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "M月d日EEE H:mm"
-          }
-        }
-      }
-    },
-    "conversation.time.yearDateWeekday": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "EEE, MMM d, yyyy H:mm"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "yyyy年M月d日EEE H:mm"
-          }
-        }
-      }
-    },
-    "发消息到群聊…": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Message the group…"
-          }
-        }
-      }
-    },
-    "发消息给 %@…": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Message %@…"
-          }
-        }
-      }
-    },
-    "图片加载失败": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Could not load image"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "图片加载失败"
-          }
-        }
-      }
-    },
-    "%lld 个结果": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld results"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld 个结果"
-          }
-        }
-      }
-    },
-    "换个关键词试试": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Try another keyword"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "换个关键词试试"
-          }
-        }
-      }
-    },
-    "没有找到相关聊天": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "No matching chats"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "没有找到相关聊天"
-          }
-        }
-      }
-    },
-    "搜索聊天名称或内容": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Search chat names or content"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "搜索聊天名称或内容"
-          }
-        }
-      }
-    },
-    "切换到工作模式": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Switch to Work mode"
-          }
-        }
-      }
-    },
-    "切换到 Bot 模式": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Switch to Bot mode"
-          }
-        }
-      }
-    },
-    "正在为你推进 %lld 件事": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Working on %lld things for you"
-          }
-        }
-      }
-    },
-    "与 %@ 聊聊": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Chat with %@"
-          }
-        }
-      }
-    },
-    "与助理聊聊": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Chat with your assistant"
-          }
-        }
-      }
-    },
-    "%lld 件事": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld things"
-          }
-        }
-      }
-    },
-    "查看历史": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "View history"
-          }
-        }
-      }
-    },
-    "下次 %@": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Next %@"
-          }
-        }
-      }
-    },
-    "查看安排": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "View schedule"
-          }
-        }
-      }
-    },
-    "群聊与私聊": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Groups and direct messages"
-          }
-        }
-      }
-    },
-    "随时为你效劳": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Always here to help"
-          }
-        }
-      }
-    },
-    "今天也交给我吧。": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Leave today to me."
-          }
-        }
-      }
-    },
-    "暂时没有进行中的事情": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Nothing in progress right now"
-          }
-        }
-      }
-    },
-    "让助理按时替你做事。": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Let your assistant take care of things on time."
-          }
-        }
-      }
-    },
-    "完成后，%@ 会在聊天里告诉你。": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ will let you know in chat when it is done."
-          }
-        }
-      }
-    },
-    "更多操作": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "More actions"
-          }
-        }
-      }
-    },
-    "选择一个聊天": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Select a chat"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "选择一个聊天"
-          }
-        }
-      }
-    },
-    "个人助理": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Personal assistant"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "个人助理"
-          }
-        }
-      }
-    },
-    "问答与工作": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Chat and work"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "问答与工作"
-          }
-        }
-      }
-    },
-    "Bot 模式": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Bot mode"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Bot 模式"
-          }
-        }
-      }
-    },
-    "Bot": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Bot"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Bot"
-          }
-        }
-      }
-    },
-    "还没有定时任务": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "No scheduled tasks yet"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "还没有定时任务"
-          }
-        }
-      }
-    },
-    "重新同步": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sync again"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "重新同步"
-          }
-        }
-      }
-    },
-    "正在同步助理": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Syncing assistant"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "正在同步助理"
-          }
-        }
-      }
-    },
-    "正在进行": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "In progress"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "正在进行"
-          }
-        }
-      }
-    },
-    "最近动态": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Recent activity"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "最近动态"
-          }
-        }
-      }
-    },
-    "聊天": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Chats"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "聊天"
-          }
-        }
-      }
-    },
-    "还没有可用的 Bot，请先在主机上配置助理": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "No bots available. Set up an assistant on your host first."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "还没有可用的 Bot，请先在主机上配置助理"
-          }
-        }
-      }
-    },
-    "我的个人助理": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "My personal assistant"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "我的个人助理"
-          }
-        }
-      }
-    },
-    "正在为你处理事情": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Working on things for you"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "正在为你处理事情"
-          }
-        }
-      }
-    },
-    "随时可以找我聊聊": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ready when you need me"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "随时可以找我聊聊"
-          }
-        }
-      }
-    },
-    "请更新主机上的移动网关以使用 Bot 模式": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Update the mobile gateway on your host to use Bot mode"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "请更新主机上的移动网关以使用 Bot 模式"
-          }
-        }
-      }
-    },
-    "连接主机后查看个人助理": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Connect to your host to see your assistant"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "连接主机后查看个人助理"
-          }
-        }
-      }
-    },
-    "群聊": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Group chat"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "群聊"
-          }
-        }
-      }
-    },
-    "加载更早消息": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Load earlier messages"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "加载更早消息"
-          }
-        }
-      }
-    },
-    "正在读取聊天": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Loading chat"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "正在读取聊天"
-          }
-        }
-      }
-    },
-    "需要你批准": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Approval needed"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "需要你批准"
-          }
-        }
-      }
-    },
-    "助理在等你回答": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Your assistant is waiting for an answer"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "助理在等你回答"
-          }
-        }
-      }
-    },
-    "仅允许这一次": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Allow once"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "仅允许这一次"
-          }
-        }
-      }
-    },
-    "回答": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Answer"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "回答"
-          }
-        }
-      }
-    },
-    "发送消息": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Send message"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "发送消息"
-          }
-        }
-      }
-    },
-    "补充回答": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Additional answer"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "补充回答"
-          }
-        }
-      }
-    },
-    "回答助理": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Answer your assistant"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "回答助理"
-          }
-        }
-      }
-    },
-    "助理": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Assistant"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "助理"
-          }
-        }
-      }
-    },
-    "发送状态待确认，请同步聊天后核对": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Delivery is uncertain. Sync the chat to check."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "发送状态待确认，请同步聊天后核对"
-          }
-        }
-      }
-    },
-    "发送中": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sending"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "发送中"
-          }
-        }
-      }
-    },
-    "已发送": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sent"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "已发送"
-          }
-        }
-      }
-    },
-    "主机上的 DS-Bot 尚未启用，或版本暂不支持": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "DS-Bot is unavailable or unsupported on this host"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "主机上的 DS-Bot 尚未启用，或版本暂不支持"
-          }
-        }
-      }
-    },
-    "请更新主机上的 DS-Bot": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Update DS-Bot on your host"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "请更新主机上的 DS-Bot"
-          }
-        }
-      }
-    },
-    "主机连接已断开，重连后将同步聊天": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Disconnected from host. Chats will sync after reconnecting."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "主机连接已断开，重连后将同步聊天"
-          }
-        }
-      }
-    },
-    "同步超时，请稍后重试；发送中的消息请先核对": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sync timed out. Check pending messages before trying again."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "同步超时，请稍后重试；发送中的消息请先核对"
-          }
-        }
-      }
-    },
-    "聊天同步暂时中断，可以重新同步": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Chat sync was interrupted. Try syncing again."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "聊天同步暂时中断，可以重新同步"
-          }
-        }
-      }
-    },
-    "切换模式": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Switch mode"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "切换模式"
-          }
-        }
-      }
-    },
-    "协作动态": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Collaboration activity"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "协作动态"
-          }
-        }
-      }
-    },
-    "已创建": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Created"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "已创建"
-          }
-        }
-      }
-    },
-    "已发消息给": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Messaged"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "已发消息给"
-          }
-        }
-      }
-    },
-    "已回答": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Answered"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "已回答"
-          }
-        }
-      }
-    },
-    "交互卡片": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Interactive card"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "交互卡片"
-          }
-        }
-      }
-    },
-    "已处理": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Handled"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "已处理"
-          }
-        }
-      }
-    },
-    "%@ 正在处理": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ is working"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ 正在处理"
-          }
-        }
-      }
-    },
-    "给 %@ 发消息": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Message %@"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "给 %@ 发消息"
-          }
-        }
-      }
-    },
-    "还没有完成记录": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "No completed work yet"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "还没有完成记录"
-          }
-        }
-      }
-    },
-    "%@ 已完成工作": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ has finished work"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ 已完成工作"
+    "已核对列表，确认未创建" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "I checked the list; no group was created"
           }
         }
       }
@@ -3378,6 +115,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "· %@"
+          }
+        }
+      }
+    },
+    "· %lld 秒" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "· %llds"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "· %lld 秒"
           }
         }
       }
@@ -3577,6 +331,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ はダウンロード済みです。タップすると再ダウンロードします。"
+          }
+        }
+      }
+    },
+    "%@ 已完成工作" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ has finished work"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 已完成工作"
+          }
+        }
+      }
+    },
+    "%@ 正在处理" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ is working"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 正在处理"
           }
         }
       }
@@ -3799,6 +587,23 @@
         }
       }
     },
+    "%lld 个 Bot" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld bots"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 个 Bot"
+          }
+        }
+      }
+    },
     "%lld 个日志文件" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -3845,6 +650,23 @@
         }
       }
     },
+    "%lld 个结果" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld results"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 个结果"
+          }
+        }
+      }
+    },
     "%lld 个附件" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -3858,6 +680,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld 件の添付ファイル"
+          }
+        }
+      }
+    },
+    "%lld 件事" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld things"
           }
         }
       }
@@ -3970,9 +803,7 @@
         }
       }
     },
-    "+%@" : {
-
-    },
+    "+%@" : {},
     "+%@  −%@" : {
       "localizations" : {
         "zh-Hans" : {
@@ -4005,9 +836,7 @@
         }
       }
     },
-    "−%@" : {
-
-    },
+    "−%@" : {},
     "0s" : {
       "localizations" : {
         "en" : {
@@ -5581,6 +2410,40 @@
         }
       }
     },
+    "Bot" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bot"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bot"
+          }
+        }
+      }
+    },
+    "Bot 模式" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bot mode"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bot 模式"
+          }
+        }
+      }
+    },
     "camera.denied" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -5715,6 +2578,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "此设备没有可用相机。"
+          }
+        }
+      }
+    },
+    "CLI 默认" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CLI default"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CLI 默认"
           }
         }
       }
@@ -5989,6 +2869,23 @@
         }
       }
     },
+    "conversation.time.dateWeekday" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "EEE, MMM d, H:mm"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "M月d日EEE H:mm"
+          }
+        }
+      }
+    },
     "conversation.time.yearDate" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -6002,6 +2899,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "yyyy年M月d日 H:mm"
+          }
+        }
+      }
+    },
+    "conversation.time.yearDateWeekday" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "EEE, MMM d, yyyy H:mm"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "yyyy年M月d日EEE H:mm"
           }
         }
       }
@@ -6322,6 +3236,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在下载 · %1$lld%%"
+          }
+        }
+      }
+    },
+    "DS Bot 模型" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "DS Bot model"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "DS Bot 模型"
           }
         }
       }
@@ -13446,6 +10376,23 @@
         }
       }
     },
+    "一次最多添加 20 个附件，请等待已有附件准备完成" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You can add up to 20 attachments. Wait for the current files to finish preparing."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一次最多添加 20 个附件，请等待已有附件准备完成"
+          }
+        }
+      }
+    },
     "三" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -13604,6 +10551,40 @@
         }
       }
     },
+    "上传照片" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Upload photo"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上传照片"
+          }
+        }
+      }
+    },
+    "上网搜索…" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Searching online…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上网搜索…"
+          }
+        }
+      }
+    },
     "下一个文件" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -13634,6 +10615,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "次の問題"
+          }
+        }
+      }
+    },
+    "下次 %@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Next %@"
           }
         }
       }
@@ -13786,6 +10778,17 @@
         }
       }
     },
+    "与 %@ 聊聊" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chat with %@"
+          }
+        }
+      }
+    },
     "与 WebUI 使用同一份部署级设置。修改只影响之后新建的会话，运行中的会话保持启动时的配置。" : {
       "localizations" : {
         "en" : {
@@ -13798,6 +10801,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "WebUI とデプロイメントレベルの設定を共有します。変更は以降に作成されるセッションにのみ影響し、実行中のセッションは起動時の設定を維持します。"
+          }
+        }
+      }
+    },
+    "与助理聊聊" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chat with your assistant"
           }
         }
       }
@@ -13844,6 +10858,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "丢弃"
+          }
+        }
+      }
+    },
+    "个人助理" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Personal assistant"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "个人助理"
           }
         }
       }
@@ -13917,6 +10947,140 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "以降に作成されるセッションのデフォルトモデルと推論強度を設定します。デプロイメントレベルの設定が更新され、WebUI にも同期されます。実行中のセッションは起動時の設定を維持します。"
+          }
+        }
+      }
+    },
+    "主 Bot" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Main Bot"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "主 Bot"
+          }
+        }
+      }
+    },
+    "主 Bot 不能删除。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Main Bots cannot be deleted."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "主 Bot 不能删除。"
+          }
+        }
+      }
+    },
+    "主 Bot 不能开启隐私。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The main Bot cannot be private."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "主 Bot 不能开启隐私。"
+          }
+        }
+      }
+    },
+    "主 Bot 可以创建和修改团队 Bot，并管理群聊。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The main Bot can create and edit team Bots and manage group chats."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "主 Bot 可以创建和修改团队 Bot，并管理群聊。"
+          }
+        }
+      }
+    },
+    "主 Bot 可以创建和修改团队 Bot，并管理群聊。可在此将主 Bot 交给其他成员。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The main Bot can create and edit team Bots and manage group chats. Transfer this role to another member here."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "主 Bot 可以创建和修改团队 Bot，并管理群聊。可在此将主 Bot 交给其他成员。"
+          }
+        }
+      }
+    },
+    "主机上的 DS-Bot 尚未启用，或版本暂不支持" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "DS-Bot is unavailable or unsupported on this host"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "主机上的 DS-Bot 尚未启用，或版本暂不支持"
+          }
+        }
+      }
+    },
+    "主机会提供模型和它所支持的思考强度。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The host provides models and their supported effort levels."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "主机会提供模型和它所支持的思考强度。"
+          }
+        }
+      }
+    },
+    "主机暂无可选模型" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The host has no available models"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "主机暂无可选模型"
           }
         }
       }
@@ -13996,6 +11160,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "主机连接"
+          }
+        }
+      }
+    },
+    "主机连接已断开，重连后将同步聊天" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Disconnected from host. Chats will sync after reconnecting."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "主机连接已断开，重连后将同步聊天"
           }
         }
       }
@@ -14119,6 +11300,23 @@
         }
       }
     },
+    "交互卡片" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Interactive card"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "交互卡片"
+          }
+        }
+      }
+    },
     "交付文件" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -14132,6 +11330,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "配信されたファイル"
+          }
+        }
+      }
+    },
+    "仅允许读取文件。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Allows the Bot to read files only."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仅允许读取文件。"
+          }
+        }
+      }
+    },
+    "仅允许这一次" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Allow once"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仅允许这一次"
           }
         }
       }
@@ -14255,6 +11487,17 @@
         }
       }
     },
+    "今天也交给我吧。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Leave today to me."
+          }
+        }
+      }
+    },
     "从 App 移除选中的 %@ 台主机及连接凭证；网关上的会话和工作区不会被删除。再次连接需重新配对。" : {
       "localizations" : {
         "en" : {
@@ -14361,6 +11604,23 @@
         }
       }
     },
+    "任务不存在，可能已被删除" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Task not found. It may have been deleted."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "タスクが見つかりません。削除された可能性があります。"
+          }
+        }
+      }
+    },
     "任务内容" : {
       "localizations" : {
         "en" : {
@@ -14377,36 +11637,19 @@
         }
       }
     },
-    "该任务属于其他会话，请从对应会话进入" : {
-      "extractionState" : "manual",
+    "任务名称" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "This task belongs to another conversation. Open it there."
+            "value" : "Task name"
           }
         },
-        "ja" : {
+        "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "このタスクは別の会話に属しています。該当する会話から開いてください。"
-          }
-        }
-      }
-    },
-    "任务不存在，可能已被删除" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Task not found. It may have been deleted."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "タスクが見つかりません。削除された可能性があります。"
+            "value" : "任务名称"
           }
         }
       }
@@ -14795,6 +12038,23 @@
         }
       }
     },
+    "使用 %@ 形象" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Use the %@ appearance"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用 %@ 形象"
+          }
+        }
+      }
+    },
     "使用登录密钥连接" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -14853,6 +12113,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "使用网页地图"
+          }
+        }
+      }
+    },
+    "使用自动分配的形象" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Use an automatically assigned appearance"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用自动分配的形象"
+          }
+        }
+      }
+    },
+    "使用自定义形象" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Use a custom appearance"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用自定义形象"
           }
         }
       }
@@ -15367,6 +12661,39 @@
         }
       }
     },
+    "允许修改工作区以外的文件，范围仍受主机系统权限限制。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Allows the Bot to edit files outside the workspace, within the host system’s permissions."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "允许修改工作区以外的文件，范围仍受主机系统权限限制。"
+          }
+        }
+      }
+    },
+    "允许在工作区内修改文件。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Allows the Bot to edit files inside the workspace."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "允许在工作区内修改文件。"
+          }
+        }
+      }
+    },
     "允许在当前工作区内读取和写入" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -15511,6 +12838,29 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Transit"
+          }
+        }
+      }
+    },
+    "公网" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Public network"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "パブリックネットワーク"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "公网"
           }
         }
       }
@@ -15962,6 +13312,23 @@
         }
       }
     },
+    "最近动态" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recent activity"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最近动态"
+          }
+        }
+      }
+    },
     "最近投递" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -16086,6 +13453,23 @@
         }
       }
     },
+    "决定由 DS Bot 模型还是电脑上的本地代理处理消息。可在 DS Bot 网页端查看或更换。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose whether messages are handled by a DS Bot model or a local agent on your computer. View or change this setting in DS Bot on the web."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "决定由 DS Bot 模型还是电脑上的本地代理处理消息。可在 DS Bot 网页端查看或更换。"
+          }
+        }
+      }
+    },
     "准备 Agent 上下文" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -16162,6 +13546,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ を呼び出す準備中"
+          }
+        }
+      }
+    },
+    "分" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Minute"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "分"
           }
         }
       }
@@ -16343,6 +13744,17 @@
         }
       }
     },
+    "切换到 Bot 模式" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Switch to Bot mode"
+          }
+        }
+      }
+    },
     "切换到对话" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -16362,6 +13774,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "切换到对话"
+          }
+        }
+      }
+    },
+    "切换到工作模式" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Switch to Work mode"
           }
         }
       }
@@ -16435,6 +13858,23 @@
         }
       }
     },
+    "切换模式" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Switch mode"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "切换模式"
+          }
+        }
+      }
+    },
     "列出" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -16465,6 +13905,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "作成"
+          }
+        }
+      }
+    },
+    "创建 Bot" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Create Bot"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "创建 Bot"
+          }
+        }
+      }
+    },
+    "创建 Bot 失败，请检查主机连接和设置后重试。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn’t create the Bot. Check the host connection and settings, then retry."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "创建 Bot 失败，请检查主机连接和设置后重试。"
           }
         }
       }
@@ -16624,6 +14098,90 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "削除"
+          }
+        }
+      }
+    },
+    "删除 Bot" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete Bot"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除 Bot"
+          }
+        }
+      }
+    },
+    "删除 Bot？" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete Bot?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除 Bot？"
+          }
+        }
+      }
+    },
+    "复制对话 ID" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copy Conversation ID"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "会話IDをコピー"
+          }
+        }
+      }
+    },
+    "置顶" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pin"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ピン留め"
+          }
+        }
+      }
+    },
+    "取消置顶" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unpin"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ピン留めを解除"
           }
         }
       }
@@ -16920,6 +14478,40 @@
         }
       }
     },
+    "删除这个定时任务？" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete this scheduled task?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除这个定时任务？"
+          }
+        }
+      }
+    },
+    "删除这条记忆？" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete this memory?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除这条记忆？"
+          }
+        }
+      }
+    },
     "刷新存储统计" : {
       "localizations" : {
         "en" : {
@@ -16993,6 +14585,23 @@
         }
       }
     },
+    "加载更多" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Load more"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "加载更多"
+          }
+        }
+      }
+    },
     "加载更多任务" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -17006,6 +14615,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "さらにタスクを読み込む"
+          }
+        }
+      }
+    },
+    "加载更早消息" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Load earlier messages"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "加载更早消息"
           }
         }
       }
@@ -17044,6 +14670,40 @@
         }
       }
     },
+    "助理" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Assistant"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "助理"
+          }
+        }
+      }
+    },
+    "助理在等你回答" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your assistant is waiting for an answer"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "助理在等你回答"
+          }
+        }
+      }
+    },
     "勾勒答案中" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -17073,6 +14733,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "含まれるコンポーネント"
+          }
+        }
+      }
+    },
+    "协作动态" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Collaboration activity"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "协作动态"
           }
         }
       }
@@ -17310,6 +14987,28 @@
         }
       }
     },
+    "发消息到群聊…" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Message the group…"
+          }
+        }
+      }
+    },
+    "发消息给 %@…" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Message %@…"
+          }
+        }
+      }
+    },
     "发送" : {
       "localizations" : {
         "en" : {
@@ -17372,6 +15071,23 @@
         }
       }
     },
+    "发送中" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sending"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "发送中"
+          }
+        }
+      }
+    },
     "发送任务后，工具调用、推理进度和最终回复会通过 Mobile Gateway 实时返回。" : {
       "localizations" : {
         "en" : {
@@ -17384,6 +15100,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "プロンプトを送信すると、ツール呼び出し、推論内容、最終的な返信が Mobile Gateway 経由でリアルタイムに返されます。"
+          }
+        }
+      }
+    },
+    "发送消息" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Send message"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "发送消息"
+          }
+        }
+      }
+    },
+    "发送状态待确认，请同步聊天后核对" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delivery is uncertain. Sync the chat to check."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "发送状态待确认，请同步聊天后核对"
           }
         }
       }
@@ -17637,6 +15387,40 @@
         }
       }
     },
+    "可用" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Available"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "可用"
+          }
+        }
+      }
+    },
+    "可用模型" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Available models"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "可用模型"
+          }
+        }
+      }
+    },
     "可领取" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -17660,6 +15444,22 @@
         }
       }
     },
+    "各 Bot 的电脑操控授权可在 DS Bot 网页端管理。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Manage each Bot’s computer control permissions in DS Bot on the web."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "各 Bot 的电脑操控授权可在 DS Bot 网页端管理。"
+          }
+        }
+      }
+    },
     "各账号分别保存登录状态。切换账号会断开当前隧道；添加账号后需要重新授权，可选择其他账号或 tailnet。" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -17679,6 +15479,74 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "各账号分别保存登录状态。切换账号会断开当前隧道；添加账号后需要重新授权，可选择其他账号或 tailnet。"
+          }
+        }
+      }
+    },
+    "同步超时，请稍后重试；发送中的消息请先核对" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sync timed out. Check pending messages before trying again."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同步超时，请稍后重试；发送中的消息请先核对"
+          }
+        }
+      }
+    },
+    "名字" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Name"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "名字"
+          }
+        }
+      }
+    },
+    "名字不能包含 @、反引号或控制字符。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The name cannot contain @, backticks, or control characters."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "名字不能包含 @、反引号或控制字符。"
+          }
+        }
+      }
+    },
+    "名字最多 40 个字符。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Use 40 characters or fewer."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "名字最多 40 个字符。"
           }
         }
       }
@@ -18023,6 +15891,40 @@
         }
       }
     },
+    "回答" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Answer"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "回答"
+          }
+        }
+      }
+    },
+    "回答助理" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Answer your assistant"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "回答助理"
+          }
+        }
+      }
+    },
     "团队 › %@" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -18053,6 +15955,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "チーム › %@ · 読み取り専用"
+          }
+        }
+      }
+    },
+    "团队成员" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Team members"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "团队成员"
           }
         }
       }
@@ -18137,6 +16056,23 @@
         }
       }
     },
+    "图片加载失败" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Could not load image"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "图片加载失败"
+          }
+        }
+      }
+    },
     "图片加载超时，请重试" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -18150,6 +16086,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "画像の読み込みがタイムアウトしました。もう一度お試しください。"
+          }
+        }
+      }
+    },
+    "图片总大小超出限制" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The selected images exceed the combined size limit"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "图片总大小超出限制"
           }
         }
       }
@@ -18440,6 +16393,23 @@
         }
       }
     },
+    "复制一份" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Duplicate"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "复制一份"
+          }
+        }
+      }
+    },
     "复制代码" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -18459,6 +16429,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "复制代码"
+          }
+        }
+      }
+    },
+    "复制分工和模型，新 Bot 从空白记忆开始。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copies the role and model. The new Bot starts with an empty memory."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "复制分工和模型，新 Bot 从空白记忆开始。"
           }
         }
       }
@@ -18499,6 +16485,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "复制表格"
+          }
+        }
+      }
+    },
+    "复制这个角色？" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Duplicate this Bot?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "复制这个角色？"
           }
         }
       }
@@ -18639,6 +16642,57 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "失败原因"
+          }
+        }
+      }
+    },
+    "头像库" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Avatar library"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "头像库"
+          }
+        }
+      }
+    },
+    "头像库操作失败" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Avatar library request failed"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "头像库操作失败"
+          }
+        }
+      }
+    },
+    "头像库还没有照片。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No photos in the avatar library yet."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "头像库还没有照片。"
           }
         }
       }
@@ -18835,6 +16889,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "完了"
+          }
+        }
+      }
+    },
+    "完成后，%@ 会在聊天里告诉你。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ will let you know in chat when it is done."
           }
         }
       }
@@ -19199,6 +17264,23 @@
         }
       }
     },
+    "导入照片" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Import photo"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "导入照片"
+          }
+        }
+      }
+    },
     "导出内容" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -19291,6 +17373,23 @@
         }
       }
     },
+    "将“%@”移出团队和所在群聊。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Remove “%@” from the team and its group chats."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将“%@”移出团队和所在群聊。"
+          }
+        }
+      }
+    },
     "将二维码完整放入框内" : {
       "localizations" : {
         "en" : {
@@ -19340,6 +17439,23 @@
         }
       }
     },
+    "将此 Bot 移出所有群聊后，才能开启隐私。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Remove this Bot from all group chats before turning on privacy."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将此 Bot 移出所有群聊后，才能开启隐私。"
+          }
+        }
+      }
+    },
     "小时" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -19357,6 +17473,23 @@
         }
       }
     },
+    "尚未确认删除结果，请重新同步后核对。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deletion hasn’t been confirmed. Sync again to check."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "尚未确认删除结果，请重新同步后核对。"
+          }
+        }
+      }
+    },
     "尚未连接到 DeepSeek Harness。请点击主页右上角的 🔑 按钮，扫描配对二维码或手动输入 Token 进行连接。" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -19370,6 +17503,29 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "DeepSeek Harness に接続されていません。ホーム画面右上の 🔑 ボタンをタップして、ペアリング用 QR コードをスキャンするか、トークンを手動で入力して接続してください。"
+          }
+        }
+      }
+    },
+    "局域网" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Local network"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ローカルネットワーク"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "局域网"
           }
         }
       }
@@ -19482,6 +17638,23 @@
         }
       }
     },
+    "展开文件夹" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Browse folder"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "展开文件夹"
+          }
+        }
+      }
+    },
     "工作区" : {
       "localizations" : {
         "en" : {
@@ -19494,6 +17667,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "ワークスペース"
+          }
+        }
+      }
+    },
+    "工作区与权限" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Workspace and permissions"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作区与权限"
           }
         }
       }
@@ -19596,6 +17785,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "ワークスペースのルート"
+          }
+        }
+      }
+    },
+    "工作文件夹" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Working folder"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作文件夹"
           }
         }
       }
@@ -19890,6 +18096,23 @@
         }
       }
     },
+    "已关闭" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Off"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已关闭"
+          }
+        }
+      }
+    },
     "已列出 %@ / %@ 个文件" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -19903,6 +18126,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "已列出 %@ / %@ 个文件"
+          }
+        }
+      }
+    },
+    "已创建" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Created"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已创建"
           }
         }
       }
@@ -19937,6 +18177,74 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "ローカルキャッシュの末尾に到達しました。接続すると以前のメッセージを読み込めます。"
+          }
+        }
+      }
+    },
+    "已发消息给" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Messaged"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已发消息给"
+          }
+        }
+      }
+    },
+    "已发送" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sent"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已发送"
+          }
+        }
+      }
+    },
+    "已回答" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Answered"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已回答"
+          }
+        }
+      }
+    },
+    "已处理" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Handled"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已处理"
           }
         }
       }
@@ -20188,6 +18496,23 @@
         }
       }
     },
+    "已登录" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Signed in"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已登录"
+          }
+        }
+      }
+    },
     "已登录账号" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -20228,6 +18553,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Registered capabilities"
+          }
+        }
+      }
+    },
+    "已经有一个同名 Bot。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A Bot already has this name."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已经有一个同名 Bot。"
           }
         }
       }
@@ -20454,6 +18796,23 @@
         }
       }
     },
+    "已选" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Selected"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已选"
+          }
+        }
+      }
+    },
     "已选择 %@" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -20621,6 +18980,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "开启"
+          }
+        }
+      }
+    },
+    "开启后，其他 Bot 无法读取它的工作文件夹、记忆和对话。向其他 Bot 分享内容需你批准。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "When privacy is on, other Bots cannot read this Bot’s working folder, memory, or chats. Sharing with other Bots requires your approval."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "开启后，其他 Bot 无法读取它的工作文件夹、记忆和对话。向其他 Bot 分享内容需你批准。"
+          }
+        }
+      }
+    },
+    "开启隐私前，请为此 Bot 设置独立的工作文件夹。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Give this Bot its own working folder before turning on privacy."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "开启隐私前，请为此 Bot 设置独立的工作文件夹。"
           }
         }
       }
@@ -20832,6 +19225,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "現在のホスト：%@。ホストを切り替え"
+          }
+        }
+      }
+    },
+    "当前主机为只读" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This host is read-only"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "当前主机为只读"
           }
         }
       }
@@ -21449,6 +19859,39 @@
         }
       }
     },
+    "形状" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shape"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "形状"
+          }
+        }
+      }
+    },
+    "形象" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Appearance"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "形象"
+          }
+        }
+      }
+    },
     "往返延迟" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -21620,6 +20063,22 @@
         }
       }
     },
+    "思考强度" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Thinking effort"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "思考强度"
+          }
+        }
+      }
+    },
     "思考等级" : {
       "localizations" : {
         "en" : {
@@ -21649,6 +20108,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "思考プロセス"
+          }
+        }
+      }
+    },
+    "总工作区" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Team workspace"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "总工作区"
           }
         }
       }
@@ -21767,6 +20243,40 @@
         }
       }
     },
+    "我的 Bot" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "My Bots"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "我的 Bot"
+          }
+        }
+      }
+    },
+    "我的个人助理" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "My personal assistant"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "我的个人助理"
+          }
+        }
+      }
+    },
     "我的主机" : {
       "localizations" : {
         "en" : {
@@ -21817,6 +20327,23 @@
         }
       }
     },
+    "所有人" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Everyone"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "所有人"
+          }
+        }
+      }
+    },
     "所选图片不是受支持的 PNG、JPEG、WebP 或 GIF。" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -21853,6 +20380,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "所选时间范围内没有日志"
+          }
+        }
+      }
+    },
+    "所选模型" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Selected model"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "所选模型"
           }
         }
       }
@@ -22627,6 +21171,22 @@
         }
       }
     },
+    "换个关键词试试" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Try another keyword"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "换个关键词试试"
+          }
+        }
+      }
+    },
     "换个角度审视中" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -22864,6 +21424,23 @@
         }
       }
     },
+    "控制 Bot 能否修改文件和可修改的范围。默认权限由主机决定。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Control whether the Bot can edit files and where it can make changes. The host sets the default permissions."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "控制 Bot 能否修改文件和可修改的范围。默认权限由主机决定。"
+          }
+        }
+      }
+    },
     "控制请求失败" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -22938,6 +21515,23 @@
         }
       }
     },
+    "推理强度" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reasoning effort"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "推理强度"
+          }
+        }
+      }
+    },
     "推理等级" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -22968,6 +21562,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "推奨"
+          }
+        }
+      }
+    },
+    "描述 Bot 在团队里的分工。这段说明会写入 Bot 的系统提示词。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Describe this Bot’s role on the team. These instructions are included in its system prompt."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "描述 Bot 在团队里的分工。这段说明会写入 Bot 的系统提示词。"
           }
         }
       }
@@ -23346,6 +21957,23 @@
         }
       }
     },
+    "搜索聊天名称或内容" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Search chat names or content"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "搜索聊天名称或内容"
+          }
+        }
+      }
+    },
     "搜集更多拼图中" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -23528,6 +22156,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "リモートのDeepSeek Harnessを操作"
+          }
+        }
+      }
+    },
+    "操控" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Control"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "操控"
           }
         }
       }
@@ -23851,6 +22495,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "文件不能超过 512 MiB"
+          }
+        }
+      }
+    },
+    "文件与文件夹" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Files and folders"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文件与文件夹"
           }
         }
       }
@@ -24266,6 +22927,23 @@
         }
       }
     },
+    "新 Bot" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New Bot"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新 Bot"
+          }
+        }
+      }
+    },
     "新主机" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -24316,6 +22994,23 @@
         }
       }
     },
+    "新建 Bot" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New Bot"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建 Bot"
+          }
+        }
+      }
+    },
     "新建 Harness 会话" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -24362,6 +23057,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "新しいセッションを作成して再利用"
+          }
+        }
+      }
+    },
+    "新建定时任务" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New scheduled task"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建定时任务"
           }
         }
       }
@@ -24556,6 +23268,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "アプリ内でプレビューできません"
+          }
+        }
+      }
+    },
+    "无法处理图片" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn’t process the image"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法处理图片"
           }
         }
       }
@@ -25064,6 +23793,23 @@
         }
       }
     },
+    "无法读取或处理所选照片。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn’t read or process the selected photo."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法读取或处理所选照片。"
+          }
+        }
+      }
+    },
     "无法读取所选文件" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -25123,6 +23869,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "无法读取日志，请重试"
+          }
+        }
+      }
+    },
+    "无法读取本地 Agent" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unable to load local Agents"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法读取本地 Agent"
           }
         }
       }
@@ -25360,6 +24123,23 @@
         }
       }
     },
+    "时" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hour"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "时"
+          }
+        }
+      }
+    },
     "时分秒" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -25464,6 +24244,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "时间范围"
+          }
+        }
+      }
+    },
+    "显示主机的电脑操控开关状态。每个 Bot 的授权可在 DS Bot 网页端管理。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shows whether computer control is enabled on the host. Manage each Bot’s access in DS Bot on the web."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示主机的电脑操控开关状态。每个 Bot 的授权可在 DS Bot 网页端管理。"
           }
         }
       }
@@ -25658,6 +24455,68 @@
         }
       }
     },
+    "暂时无法删除此 Bot，请稍后重试。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn’t delete this Bot. Try again later."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "暂时无法删除此 Bot，请稍后重试。"
+          }
+        }
+      }
+    },
+    "暂时无法确认创建结果，请返回列表查看。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn’t confirm the result. Check the Bot list before trying again."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "暂时无法确认创建结果，请返回列表查看。"
+          }
+        }
+      }
+    },
+    "暂时无法读取引用" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Could not load references"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "暂时无法读取引用"
+          }
+        }
+      }
+    },
+    "暂时没有进行中的事情" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nothing in progress right now"
+          }
+        }
+      }
+    },
     "更多" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -25677,6 +24536,51 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "更多"
+          }
+        }
+      }
+    },
+    "更多操作" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "More actions"
+          }
+        }
+      }
+    },
+    "更换主 Bot" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Change main Bot"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更换主 Bot"
+          }
+        }
+      }
+    },
+    "更换主 Bot？" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Change the main Bot?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更换主 Bot？"
           }
         }
       }
@@ -25975,6 +24879,23 @@
         }
       }
     },
+    "未发现本地 Agent" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No local Agents found"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未发现本地 Agent"
+          }
+        }
+      }
+    },
     "未启用" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -26061,6 +24982,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "未检测到可用地图应用"
+          }
+        }
+      }
+    },
+    "未登录" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Signed out"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未登录"
           }
         }
       }
@@ -26246,22 +25184,6 @@
         }
       }
     },
-    "未读消息：%lld" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Unread messages: %lld"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "未读消息：%lld"
-          }
-        }
-      }
-    },
     "未读取" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -26275,6 +25197,33 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "未読み込み"
+          }
+        }
+      }
+    },
+    "未读消息：%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unread messages: %@"
+          }
+        }
+      }
+    },
+    "未读消息：%lld" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unread messages: %lld"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未读消息：%lld"
           }
         }
       }
@@ -26349,6 +25298,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "未選択"
+          }
+        }
+      }
+    },
+    "本地 Agent" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Local Agent"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本地 Agent"
           }
         }
       }
@@ -26700,6 +25665,23 @@
         }
       }
     },
+    "查看与创建" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "View and create"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "查看与创建"
+          }
+        }
+      }
+    },
     "查看会话" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -26734,6 +25716,17 @@
         }
       }
     },
+    "查看历史" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "View history"
+          }
+        }
+      }
+    },
     "查看图片" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -26747,6 +25740,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "画像を表示"
+          }
+        }
+      }
+    },
+    "查看安排" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "View schedule"
           }
         }
       }
@@ -26804,6 +25808,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "統計の全体を表示"
+          }
+        }
+      }
+    },
+    "查看或管理此 Bot 按时间自动执行的任务。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "View or manage tasks this Bot runs automatically on a schedule."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "查看或管理此 Bot 按时间自动执行的任务。"
           }
         }
       }
@@ -27001,6 +26022,39 @@
         }
       }
     },
+    "标签" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Role label"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "标签"
+          }
+        }
+      }
+    },
+    "标签为选填，会显示在 Bot 名字下方。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The label is optional and appears below the Bot’s name."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "标签为选填，会显示在 Bot 名字下方。"
+          }
+        }
+      }
+    },
     "标题" : {
       "localizations" : {
         "en" : {
@@ -27119,6 +26173,22 @@
         }
       }
     },
+    "模型" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Model"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "模型"
+          }
+        }
+      }
+    },
     "模型已切换" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -27132,6 +26202,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "モデルを切り替えました"
+          }
+        }
+      }
+    },
+    "模型更改从下一条消息开始生效。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Model changes take effect with the next message."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "模型更改从下一条消息开始生效。"
           }
         }
       }
@@ -27251,6 +26337,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "ダウンロード中 · %lld%%"
+          }
+        }
+      }
+    },
+    "正在为你处理事情" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Working on things for you"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在为你处理事情"
+          }
+        }
+      }
+    },
+    "正在为你推进 %lld 件事" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Working on %lld things for you"
           }
         }
       }
@@ -27455,6 +26569,23 @@
         }
       }
     },
+    "正在切换工作文件夹…" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Switching working folders…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在切换工作文件夹…"
+          }
+        }
+      }
+    },
     "正在创建" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -27590,6 +26721,22 @@
         }
       }
     },
+    "正在同步助理" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Syncing assistant"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在同步助理"
+          }
+        }
+      }
+    },
     "正在同步执行状态…" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -27603,6 +26750,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "実行状態を同期中…"
+          }
+        }
+      }
+    },
+    "正在处理…" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Working…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在处理…"
+          }
+        }
+      }
+    },
+    "正在处理图片…" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Preparing images…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在处理图片…"
           }
         }
       }
@@ -27666,6 +26847,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在开启麦克风"
+          }
+        }
+      }
+    },
+    "正在思考…" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Thinking…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在思考…"
           }
         }
       }
@@ -27846,6 +27044,23 @@
         }
       }
     },
+    "正在浏览网页…" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reading a webpage…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在浏览网页…"
+          }
+        }
+      }
+    },
     "正在生成回复" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -27859,6 +27074,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "返信を生成中"
+          }
+        }
+      }
+    },
+    "正在生成图片…" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Generating an image…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在生成图片…"
           }
         }
       }
@@ -28244,6 +27476,23 @@
         }
       }
     },
+    "正在读取聊天" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loading chat"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在读取聊天"
+          }
+        }
+      }
+    },
     "正在读取远程目录…" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -28297,6 +27546,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在转成文字"
+          }
+        }
+      }
+    },
+    "正在进行" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In progress"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在进行"
           }
         }
       }
@@ -28618,6 +27884,23 @@
         }
       }
     },
+    "每天运行时间" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Daily run time"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每天运行时间"
+          }
+        }
+      }
+    },
     "每小时" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -28783,6 +28066,23 @@
         }
       }
     },
+    "没有匹配的引用" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No matching references"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有匹配的引用"
+          }
+        }
+      }
+    },
     "没有参数" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -28812,6 +28112,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "利用できるエージェントプリセットがありません"
+          }
+        }
+      }
+    },
+    "没有找到相关聊天" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No matching chats"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有找到相关聊天"
           }
         }
       }
@@ -28903,6 +28219,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "モデルオプションが記録されていません"
+          }
+        }
+      }
+    },
+    "沿用 %@ 的默认模型。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Use the default model for %@."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "沿用 %@ 的默认模型。"
+          }
+        }
+      }
+    },
+    "沿用主机预选模型，可在 Bot 详情中修改。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Use the host’s preferred model. You can change it in Bot settings."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "沿用主机预选模型，可在 Bot 详情中修改。"
           }
         }
       }
@@ -29119,6 +28469,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "ワークスペースを追加"
+          }
+        }
+      }
+    },
+    "添加记忆" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add memory"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加记忆"
           }
         }
       }
@@ -29350,29 +28716,6 @@
         }
       }
     },
-    "相机" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Camera"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "カメラ"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "相机"
-          }
-        }
-      }
-    },
     "版本" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -29549,6 +28892,23 @@
         }
       }
     },
+    "电脑操控" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Computer control"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "电脑操控"
+          }
+        }
+      }
+    },
     "界面" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -29562,6 +28922,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "インターフェース"
+          }
+        }
+      }
+    },
+    "留空会使用自动生成的名字。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Leave blank to use a generated name."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "留空会使用自动生成的名字。"
           }
         }
       }
@@ -29765,6 +29142,29 @@
         }
       }
     },
+    "相机" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Camera"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "カメラ"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "相机"
+          }
+        }
+      }
+    },
     "知道了" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -29901,6 +29301,23 @@
         }
       }
     },
+    "确认授予完全权限？" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Grant full access?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "确认授予完全权限？"
+          }
+        }
+      }
+    },
     "确认结果后才能继续操作" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -29993,6 +29410,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "秒"
+          }
+        }
+      }
+    },
+    "移除" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Remove"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除"
           }
         }
       }
@@ -30581,6 +30015,39 @@
         }
       }
     },
+    "管理" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Manage"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "管理"
+          }
+        }
+      }
+    },
+    "管理 Bot 保存的信息，这些信息可用于后续对话。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Manage information saved by the Bot for use in future conversations."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "管理 Bot 保存的信息，这些信息可用于后续对话。"
+          }
+        }
+      }
+    },
     "粘贴 Harness WebUI 提供的 Base64URL 配对字符串。长期设备 token 仍只会保存到 Keychain。" : {
       "localizations" : {
         "en" : {
@@ -30650,6 +30117,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "系统权限未允许，请在设置中检查。"
+          }
+        }
+      }
+    },
+    "系统默认" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "System default"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "系统默认"
           }
         }
       }
@@ -30827,6 +30311,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "結果"
+          }
+        }
+      }
+    },
+    "给 %@ 发消息" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Message %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "给 %@ 发消息"
           }
         }
       }
@@ -31056,6 +30557,23 @@
         }
       }
     },
+    "编辑形象" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Edit appearance"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "编辑形象"
+          }
+        }
+      }
+    },
     "编辑排队消息" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -31092,6 +30610,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "编辑目标"
+          }
+        }
+      }
+    },
+    "编辑记忆" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Edit memory"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "编辑记忆"
           }
         }
       }
@@ -31148,6 +30682,7 @@
       }
     },
     "网关地址" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -31562,6 +31097,51 @@
         }
       }
     },
+    "群成员" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Group members"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "群成员"
+          }
+        }
+      }
+    },
+    "群聊" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Group chat"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "群聊"
+          }
+        }
+      }
+    },
+    "群聊与私聊" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Groups and direct messages"
+          }
+        }
+      }
+    },
     "翻阅已有线索中" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -31596,6 +31176,23 @@
         }
       }
     },
+    "聊天" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chats"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "聊天"
+          }
+        }
+      }
+    },
     "聊天中已下载的图片" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -31615,6 +31212,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "聊天中已下载的图片"
+          }
+        }
+      }
+    },
+    "聊天同步暂时中断，可以重新同步" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chat sync was interrupted. Try syncing again."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "聊天同步暂时中断，可以重新同步"
           }
         }
       }
@@ -31908,6 +31522,23 @@
         }
       }
     },
+    "补充回答" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Additional answer"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "补充回答"
+          }
+        }
+      }
+    },
     "表格" : {
       "localizations" : {
         "en" : {
@@ -31981,6 +31612,23 @@
         }
       }
     },
+    "角色设置" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bot settings"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "角色设置"
+          }
+        }
+      }
+    },
     "解析地址" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -32028,6 +31676,33 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "計画のレビュー待ち"
+          }
+        }
+      }
+    },
+    "让助理按时替你做事。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Let your assistant take care of things on time."
+          }
+        }
+      }
+    },
+    "记忆" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Memory"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "记忆"
           }
         }
       }
@@ -32240,6 +31915,23 @@
         }
       }
     },
+    "设置此 Bot 的默认工作目录。留空时使用团队的总工作区。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Set this Bot’s default working folder. Leave it blank to use the team workspace."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设置此 Bot 的默认工作目录。留空时使用团队的总工作区。"
+          }
+        }
+      }
+    },
     "试试其他任务状态" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -32270,6 +31962,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "別のキーワードまたはタスクステータスをお試しください"
+          }
+        }
+      }
+    },
+    "该任务属于其他会话，请从对应会话进入" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This task belongs to another conversation. Open it there."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このタスクは別の会話に属しています。該当する会話から開いてください。"
           }
         }
       }
@@ -32485,6 +32194,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "语音输入暂不可用"
+          }
+        }
+      }
+    },
+    "说明" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Instructions"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "说明"
           }
         }
       }
@@ -32807,6 +32532,57 @@
         }
       }
     },
+    "请更新主机上的 DS-Bot" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Update DS-Bot on your host"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请更新主机上的 DS-Bot"
+          }
+        }
+      }
+    },
+    "请更新主机上的移动网关以使用 Bot 模式" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Update the mobile gateway on your host to use Bot mode"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请更新主机上的移动网关以使用 Bot 模式"
+          }
+        }
+      }
+    },
+    "请更新主机上的移动网关和 DS Bot 后再创建 Bot" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Update Mobile Gateway and DS Bot on the host to create a Bot"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请更新主机上的移动网关和 DS Bot 后再创建 Bot"
+          }
+        }
+      }
+    },
     "请更新并重启 Mobile Gateway，以支持发送消息前配置新会话" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -33023,6 +32799,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "ゲートウェイに接続してから再試行してください。"
+          }
+        }
+      }
+    },
+    "请选择主机上可用的 Agent。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose an available Agent on the host."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请选择主机上可用的 Agent。"
           }
         }
       }
@@ -33303,6 +33096,23 @@
         }
       }
     },
+    "调整模型投入的推理量。可选档位取决于模型。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Adjust how much reasoning the model does. Available levels depend on the model."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "调整模型投入的推理量。可选档位取决于模型。"
+          }
+        }
+      }
+    },
     "调用参数" : {
       "localizations" : {
         "en" : {
@@ -33400,6 +33210,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "账号备注（可选）"
+          }
+        }
+      }
+    },
+    "资料" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Profile"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "资料"
           }
         }
       }
@@ -33712,7 +33538,6 @@
       }
     },
     "运行中" : {
-      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -33764,6 +33589,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "运行库加载失败"
+          }
+        }
+      }
+    },
+    "运行方式" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Run mode"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "运行方式"
           }
         }
       }
@@ -33836,6 +33678,39 @@
         }
       }
     },
+    "近 30 天用量" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Usage in the last 30 days"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "近 30 天用量"
+          }
+        }
+      }
+    },
+    "返回" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Back"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "返回"
+          }
+        }
+      }
+    },
     "返回上一级" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -33883,6 +33758,153 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Back to capabilities"
+          }
+        }
+      }
+    },
+    "还没有 Bot" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No Bots yet"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "还没有 Bot"
+          }
+        }
+      }
+    },
+    "还没有可用的 Bot，请先在主机上配置助理" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No bots available. Set up an assistant on your host first."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "还没有可用的 Bot，请先在主机上配置助理"
+          }
+        }
+      }
+    },
+    "还没有完成记录" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No completed work yet"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "还没有完成记录"
+          }
+        }
+      }
+    },
+    "还没有定时任务" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No scheduled tasks yet"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "还没有定时任务"
+          }
+        }
+      }
+    },
+    "还没有记忆" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No memories yet"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "还没有记忆"
+          }
+        }
+      }
+    },
+    "这个 Bot 做什么" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "What this Bot does"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这个 Bot 做什么"
+          }
+        }
+      }
+    },
+    "这个 Bot 负责什么…" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "What is this Bot responsible for…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这个 Bot 负责什么…"
+          }
+        }
+      }
+    },
+    "这个名字在群聊中有保留用途。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This name is reserved in group chats."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这个名字在群聊中有保留用途。"
+          }
+        }
+      }
+    },
+    "这段说明会写入 Bot 的系统提示词。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This description is included in the Bot’s system prompt."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这段说明会写入 Bot 的系统提示词。"
           }
         }
       }
@@ -34031,6 +34053,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "连接主机后，将显示网关确认的能力。"
+          }
+        }
+      }
+    },
+    "连接主机后可以创建 Bot" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connect to a host to create a Bot"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连接主机后可以创建 Bot"
+          }
+        }
+      }
+    },
+    "连接主机后查看个人助理" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connect to your host to see your assistant"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连接主机后查看个人助理"
           }
         }
       }
@@ -34285,50 +34341,6 @@
         }
       }
     },
-    "公网" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Public network"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "パブリックネットワーク"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "公网"
-          }
-        }
-      }
-    },
-    "局域网" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Local network"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ローカルネットワーク"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "局域网"
-          }
-        }
-      }
-    },
     "连接方式" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -34399,6 +34411,57 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "ゲートウェイに接続するとスケジュールタスクを編集できます"
+          }
+        }
+      }
+    },
+    "选填，会显示在 Bot 名字下方。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Optional. Appears below the Bot’s name."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选填，会显示在 Bot 名字下方。"
+          }
+        }
+      }
+    },
+    "选择" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Select"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择"
+          }
+        }
+      }
+    },
+    "选择一个聊天" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Select a chat"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择一个聊天"
           }
         }
       }
@@ -34579,6 +34642,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "時刻を選択"
+          }
+        }
+      }
+    },
+    "选择模型" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose model"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择模型"
+          }
+        }
+      }
+    },
+    "选择此 Bot 回复消息使用的模型。更改从下一条消息开始生效。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose the model this Bot uses to reply. Changes apply from the next message."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择此 Bot 回复消息使用的模型。更改从下一条消息开始生效。"
           }
         }
       }
@@ -34860,6 +34957,23 @@
         }
       }
     },
+    "重新同步" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sync again"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新同步"
+          }
+        }
+      }
+    },
     "重新校准方向中" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -35018,6 +35132,23 @@
         }
       }
     },
+    "问答与工作" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chat and work"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "问答与工作"
+          }
+        }
+      }
+    },
     "问题已在其他端处理" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -35154,6 +35285,23 @@
         }
       }
     },
+    "隐私" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Privacy"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "隐私"
+          }
+        }
+      }
+    },
     "隐私政策" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -35188,6 +35336,51 @@
         }
       }
     },
+    "随时为你效劳" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Always here to help"
+          }
+        }
+      }
+    },
+    "随时可以找我聊聊" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ready when you need me"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "随时可以找我聊聊"
+          }
+        }
+      }
+    },
+    "随机" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shuffle"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "随机"
+          }
+        }
+      }
+    },
     "隧道状态" : {
       "localizations" : {
         "en" : {
@@ -35206,6 +35399,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "隧道状态"
+          }
+        }
+      }
+    },
+    "需要你批准" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Approval needed"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "需要你批准"
           }
         }
       }
@@ -35457,6 +35667,23 @@
         }
       }
     },
+    "颜色" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Color"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "颜色"
+          }
+        }
+      }
+    },
     "首 token 平均" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -35566,6 +35793,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "マイクの録音に失敗しました。もう一度お試しください。"
+          }
+        }
+      }
+    },
+    "默认" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Default"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "默认"
           }
         }
       }
@@ -35683,6 +35926,270 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "デフォルト設定の更新に失敗しました"
+          }
+        }
+      }
+    },
+    "新建对话" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New conversation"
+          }
+        }
+      }
+    },
+    "新建群聊" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New group chat"
+          }
+        }
+      }
+    },
+    "查找 Bot…" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Find a Bot…"
+          }
+        }
+      }
+    },
+    "查找 Bot" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Find a Bot"
+          }
+        }
+      }
+    },
+    "选择群聊成员" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose group members"
+          }
+        }
+      }
+    },
+    "第一位选中的成员为管理员。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The first member you select becomes the administrator."
+          }
+        }
+      }
+    },
+    "管理员" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Administrator"
+          }
+        }
+      }
+    },
+    "已选择" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Selected"
+          }
+        }
+      }
+    },
+    "搜索名称或角色" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Search by name or role"
+          }
+        }
+      }
+    },
+    "可选择已从侧边栏隐藏的 Bot。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bots hidden from the sidebar are also available."
+          }
+        }
+      }
+    },
+    "没有找到相关 Bot" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No matching Bots"
+          }
+        }
+      }
+    },
+    "首条消息（选填）" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "First message (optional)"
+          }
+        }
+      }
+    },
+    "描述群聊用途" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Describe the purpose of this group"
+          }
+        }
+      }
+    },
+    "连接主机后可以新建会话" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connect to the host to start a conversation"
+          }
+        }
+      }
+    },
+    "请更新主机上的移动网关以新建会话" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Update the mobile gateway on your host to start conversations"
+          }
+        }
+      }
+    },
+    "暂时无法确认提交结果，请返回聊天列表核对，避免重复创建或发送。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The result could not be confirmed. Check your chats before creating or sending again."
+          }
+        }
+      }
+    },
+    "群聊已创建，首条消息发送失败。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The group was created, but the first message could not be sent."
+          }
+        }
+      }
+    },
+    "操作失败，请重试。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The operation failed. Please try again."
+          }
+        }
+      }
+    },
+    "不填写首条消息时，管理员会先询问群聊用途。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Leave the first message empty to let the administrator ask about the group’s purpose."
+          }
+        }
+      }
+    },
+    "重试发送首条消息" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Retry first message"
+          }
+        }
+      }
+    },
+    "进入群聊" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open group chat"
+          }
+        }
+      }
+    },
+    "创建群聊 · %lld 位 Bot" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Create group · %lld Bots"
+          }
+        }
+      }
+    },
+    "已选 %lld" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld selected"
+          }
+        }
+      }
+    },
+    "移除 %@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Remove %@"
           }
         }
       }

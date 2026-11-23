@@ -220,6 +220,16 @@ internal fun BotModeScreen(holder: AndroidSharedStateHolder, onStandardMode: () 
     var chatSearch by rememberSaveable { mutableStateOf("") }
     var schedules by rememberSaveable { mutableStateOf(false) }
     var roster by rememberSaveable { mutableStateOf(false) }
+    var newBot by rememberSaveable { mutableStateOf(false) }
+    var conversationPicker by rememberSaveable { mutableStateOf<Boolean?>(null) }
+    LaunchedEffect(state.conversation.openedId) {
+        state.conversation.openedId?.let { id ->
+            conversationPicker = null
+            focus.clearFocus()
+            holder.selectBotChat(id)
+            opened = id
+        }
+    }
     var roleId by rememberSaveable { mutableStateOf<String?>(null) }
     var memberRoomId by rememberSaveable { mutableStateOf<String?>(null) }
     val role = state.chats.firstOrNull { it.id == roleId && !it.room }
@@ -239,7 +249,7 @@ internal fun BotModeScreen(holder: AndroidSharedStateHolder, onStandardMode: () 
                 val fullHeight = maxHeight + WindowInsets.ime.asPaddingValues().calculateBottomPadding()
                 val wide = maxWidth >= 760.dp && fullHeight >= 500.dp && LocalDensity.current.fontScale < 1.5f
                 val leftWidth = minOf(440.dp, maxWidth * .38f)
-                SideEffect { onChatOpened(opened != null || roster) }
+                SideEffect { onChatOpened(opened != null || roster || newBot || conversationPicker != null) }
                 val closeChat = {
                     focus.clearFocus()
                     opened = null
@@ -252,7 +262,7 @@ internal fun BotModeScreen(holder: AndroidSharedStateHolder, onStandardMode: () 
                         GatewaySwitcherBar(onDarkBackground = false)
                     }
                 }
-                val showingHome = opened == null && !roster
+                val showingHome = opened == null && !roster && !newBot && conversationPicker == null
                 DshLiquidGlassHost(modifier = Modifier.fillMaxSize(), frostOnOlderDevices = showingHome,
                     workspaceScrollState = homeListState.takeIf { showingHome }, background = { backdrop ->
                     if (showingHome) HarnessAnimatedBackground(backdrop,
@@ -261,7 +271,11 @@ internal fun BotModeScreen(holder: AndroidSharedStateHolder, onStandardMode: () 
                     else Box(backdrop.fillMaxSize().background(chatSurface))
                 }) {
                     val select: (String) -> Unit = { focus.clearFocus(); holder.selectBotChat(it); opened = it }
-                    if (roster) {
+                    if (conversationPicker != null) {
+                        BotConversationPicker(holder, requireNotNull(conversationPicker)) { conversationPicker = null }
+                    } else if (newBot) {
+                        BotManagementFlow(holder, onDismiss = { newBot = false }, showRole = showProfile, startCreating = true)
+                    } else if (roster) {
                         BotManagementFlow(holder, onDismiss = { roster = false }, showRole = showProfile)
                     } else if (opened != null) {
                         val chatId = requireNotNull(opened)
@@ -291,7 +305,12 @@ internal fun BotModeScreen(holder: AndroidSharedStateHolder, onStandardMode: () 
                                 { roster = true }, holder::refreshBotMode, showProfile)
                         }
                         val chatHeader: @Composable () -> Unit = {
-                            BotChatSectionHeader(colors, chats.size, chatSearch, wide) { chatSearch = it }
+                            BotChatSectionHeader(colors, chats.size, chatSearch, wide,
+                                error = state.conversation.error?.let { state.conversation.errorDetail ?: it }, actions = {
+                                BotNewConversationMenu(holder, colors, { newBot = true }, {
+                                    holder.beginBotConversation(); conversationPicker = true
+                                }, { holder.beginBotConversation(); conversationPicker = false })
+                            }) { chatSearch = it }
                         }
                         val searching = chatSearch.isNotBlank()
                         if (wide) {
@@ -423,12 +442,53 @@ private fun BotAssistantContent(
 }
 
 @Composable
-private fun BotChatSectionHeader(colors: BotColors, resultCount: Int, query: String, wide: Boolean, onQueryChange: (String) -> Unit) {
+private fun BotChatSectionHeader(colors: BotColors, resultCount: Int, query: String, wide: Boolean,
+    error: String?, actions: @Composable () -> Unit, onQueryChange: (String) -> Unit) {
     val spacing = if (wide) 16.dp else 10.dp
     Column(Modifier.padding(bottom = spacing), verticalArrangement = Arrangement.spacedBy(spacing)) {
-        BotSectionTitle(appText("聊天"), if (query.isBlank()) appText("群聊与私聊") else appText("%1\$s 个结果", resultCount), colors)
+        Row(Modifier.fillMaxWidth().heightIn(min = 40.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(appText("聊天"), fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = colors.text, modifier = Modifier.weight(1f))
+            if (query.isNotBlank()) Text(appText("%1\$s 个结果", resultCount), fontSize = 12.sp, color = colors.secondary,
+                modifier = Modifier.padding(end = 8.dp))
+            actions()
+        }
+        if (error != null) Text(error, fontSize = 13.sp, color = Color.Red)
         SessionSearch(query, onQueryChange, placeholder = appText("搜索聊天名称或内容"), appearanceDark = false,
             modifier = Modifier.testTag("bot.chat-search"), foreground = colors.text, clearable = true)
+    }
+}
+
+@Composable
+private fun BotNewConversationMenu(holder: AndroidSharedStateHolder, colors: BotColors,
+    createBot: () -> Unit, createGroup: () -> Unit, searchBots: () -> Unit) {
+    val state = holder.botSnapshot
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        DshGlassButton(appText("新建对话"), { expanded = !expanded }, Modifier.size(44.dp).testTag("bot.conversation.new"), enabled = !state.conversation.saving) {
+            Icon(painterResource(R.drawable.ic_add), null, Modifier.size(20.dp), tint = colors.text)
+        }
+        if (state.conversation.saving) CircularProgressIndicator(Modifier.size(18.dp).align(Alignment.Center), color = colors.purple, strokeWidth = 2.dp)
+        DshMenu(expanded, { expanded = false }, Modifier.width(250.dp).heightIn(max = 520.dp), alignToEnd = true) {
+            DshMenuItem({ Text(appText("新建 Bot"), fontSize = 17.sp) }, { expanded = false; createBot() },
+                enabled = state.canCreateBot, minHeight = 44.dp)
+            DshMenuItem({ Text(appText("新建群聊"), fontSize = 17.sp) }, { expanded = false; createGroup() },
+                enabled = state.connected && state.writable && state.conversation.supported, minHeight = 44.dp,
+                modifier = Modifier.testTag("bot.conversation.group"))
+            DshMenuItem({ Text(appText("查找 Bot…"), fontSize = 17.sp) }, { expanded = false; searchBots() }, minHeight = 44.dp,
+                modifier = Modifier.testTag("bot.conversation.find"))
+            HorizontalDivider(color = colors.line.copy(alpha = .45f), thickness = .5.dp)
+            state.roster.forEach { bot ->
+                DshMenuItem(text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text(bot.name, fontSize = 17.sp)
+                        if (bot.role.isNotBlank()) Text(bot.role, color = colors.secondary, fontSize = 13.sp)
+                    }
+                }, onClick = { expanded = false; holder.beginBotConversation(); holder.openConversationBot(bot.id) },
+                    leadingIcon = { BotAvatar(bot, 28.dp, state.isMainBot(bot.id)) }, minHeight = 56.dp,
+                    enabled = !state.conversation.saving && (!bot.hidden || state.connected && state.writable && state.conversation.supported),
+                    modifier = Modifier.testTag("bot.conversation.open.${bot.id}"))
+            }
+        }
     }
 }
 
@@ -915,7 +975,9 @@ private fun BotLiveWorkElapsed(startedAt: Long, color: Color) {
     val user = message.kind == "user"
     val night = isSystemInDarkTheme()
     val parts = message.quoteParts
-    val width = minOf(292.dp, bubbleAreaWidth - if (user) 40.dp else 76.dp).coerceAtLeast(80.dp)
+    // 与 iOS 一致：宽窗口放开阅读宽度，分屏窄窗口仍保留紧凑气泡。
+    val maximumBubbleWidth = if (bubbleAreaWidth >= 560.dp) 720.dp else 292.dp
+    val width = minOf(maximumBubbleWidth, bubbleAreaWidth - if (user) 40.dp else 76.dp).coerceAtLeast(80.dp)
     Row(Modifier.width(bubbleAreaWidth).testTag("bot.message.${message.id}"),
         horizontalArrangement = if (user) Arrangement.End else Arrangement.Start, verticalAlignment = Alignment.Top) {
         if (!user) {

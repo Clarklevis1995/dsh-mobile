@@ -1,9 +1,12 @@
 package com.clarklevis.dsh.android.ui
 
 import android.graphics.Bitmap
+import android.content.ClipboardManager
 import android.os.ParcelFileDescriptor
 import android.provider.Settings
+import android.view.KeyEvent
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
@@ -13,6 +16,8 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performScrollToNode
@@ -32,6 +37,61 @@ class WorkspaceSessionSectionsDeviceTest {
     @get:Rule val locale = ChineseDeviceLocaleRule()
     @get:Rule val compose = createComposeRule()
     private var animatorScale: String? = null
+
+    @Test
+    fun sessionMenuCopiesFullIdAndShowsHostPins() {
+        val holder = AndroidSharedStateHolder()
+        val id = "session-menu-regression-full-identifier-1"
+        try {
+            holder.wirePayload = """{"kind":"sessions","items":[
+                {"sessionId":"newer","updatedAt":1800000090,"running":false,"blank":false},
+                {"sessionId":"$id","updatedAt":1800000000,"running":false,"blank":false}
+            ]}"""
+            holder.submitWirePayload()
+            holder.wirePayload = """{"kind":"workspaces","items":[{"workspaceId":"w","path":"/repo",
+                "title":"Workspace","sessionIds":["newer","$id"],"createdAt":"","updatedAt":""}]}"""
+            holder.submitWirePayload()
+            holder.selectWorkspace("w")
+            compose.setContent {
+                DshTheme { AdaptiveWindowHost { WorkspaceScreen(holder, {}, {}, {}, {}, {}, onConnectors = {}) } }
+            }
+            val row = compose.onNodeWithTag("workspace-session-$id")
+            val newer = compose.onNodeWithTag("workspace-session-newer")
+            row.performScrollTo()
+            row.performTouchInput { longClick(androidx.compose.ui.geometry.Offset(width * 0.12f, center.y)) }
+            compose.onNodeWithText("复制对话 ID").assertIsDisplayed()
+            val context = InstrumentationRegistry.getInstrumentation().targetContext
+            File(context.getExternalFilesDir(null), "workspace-session-pin-menu.png").outputStream().use {
+                InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot().compress(Bitmap.CompressFormat.PNG, 100, it)
+            }
+            compose.onNodeWithText("复制对话 ID").performClick()
+            compose.runOnIdle {
+                val clipboard = context.getSystemService(ClipboardManager::class.java)
+                assertEquals(id, clipboard?.primaryClip?.getItemAt(0)?.text?.toString())
+            }
+            row.performTouchInput { longClick(androidx.compose.ui.geometry.Offset(width * 0.8f, center.y)) }
+            compose.onNodeWithText("置顶").assertIsNotEnabled()
+            val instrumentation = InstrumentationRegistry.getInstrumentation()
+            instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
+            compose.runOnIdle {
+                holder.wirePayload = """{"kind":"session-pins","pinnedSessionIds":["$id"]}"""
+                holder.submitWirePayload()
+            }
+            compose.waitUntil(5_000) {
+                row.fetchSemanticsNode().boundsInRoot.top < newer.fetchSemanticsNode().boundsInRoot.top
+            }
+            row.performTouchInput { longClick(center) }
+            compose.onNodeWithText("取消置顶").assertIsNotEnabled()
+            instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
+            compose.runOnIdle {
+                holder.wirePayload = """{"kind":"session-pins","pinnedSessionIds":[]}"""
+                holder.submitWirePayload()
+            }
+            compose.waitUntil(5_000) {
+                newer.fetchSemanticsNode().boundsInRoot.top < row.fetchSemanticsNode().boundsInRoot.top
+            }
+        } finally { compose.runOnIdle { holder.close() } }
+    }
 
     @Test
     fun tabletFirstSessionStartsDirectlyBelowSearch() {

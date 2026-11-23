@@ -38,6 +38,7 @@ struct WorkspaceSessionListInput: Equatable, Sendable {
     var routingJSON = "[]"
     var query = ""
     var expandedSectionIDs: Set<String> = []
+    var pins: [String] = []
 
     func project() -> WorkspaceSessionListSnapshot {
         guard !Task.isCancelled else { return .init() }
@@ -98,10 +99,28 @@ struct WorkspaceSessionListInput: Equatable, Sendable {
         let count = scoped.count
         var entries: [WorkspaceSessionListEntry] = []
         entries.reserveCapacity(scoped.count + workspaces.count + 1)
+
+        let ranks = Dictionary(pins.enumerated().map { ($1, $0) }, uniquingKeysWith: min)
+        func appendRows(_ rows: [SessionSummary], toggleID: String, limit: Int) {
+            let pinned = ranks.isEmpty ? [] : rows.filter { ranks[$0.id] != nil }.sorted {
+                ranks[$0.id, default: .max] < ranks[$1.id, default: .max]
+            }
+            let ordered = pinned.isEmpty ? rows : pinned + rows.filter { ranks[$0.id] == nil }
+            let collapsedLimit = max(limit, pinned.count)
+            let expanded = expandedSectionIDs.contains(toggleID)
+            for session in ordered.prefix(expanded ? ordered.count : collapsedLimit) {
+                entries.append(.session(session, snippet: query.isEmpty ? nil : hits[session.id],
+                    isPinned: ranks[session.id] != nil))
+            }
+            if rows.count > collapsedLimit {
+                entries.append(.sectionToggle(id: toggleID, remainingCount: rows.count - collapsedLimit, isExpanded: expanded))
+            }
+        }
+
         if isAll {
             guard !Task.isCancelled else { return .init() }
             let groups = Dictionary(grouping: scoped) { owners[$0.id] ?? ungroupedID }
-            // 分区按最近活动排序，相同时间按稳定 ID 排序；区内仍按时间倒序。
+            // 分区按最近活动排序；置顶仅影响区内的会话顺序。
             let ordered = groups.keys.sorted {
                 let lhs = groups[$0]?.first?.lastActivity ?? .distantPast
                 let rhs = groups[$1]?.first?.lastActivity ?? .distantPast
@@ -110,25 +129,13 @@ struct WorkspaceSessionListInput: Equatable, Sendable {
             for (index, id) in ordered.enumerated() {
                 guard !Task.isCancelled else { return .init() }
                 let rows = groups[id] ?? []
-                let isExpanded = expandedSectionIDs.contains(id)
-                let displayedRows = isExpanded ? rows[...] : rows.prefix(Self.collapsedSectionLimit)
                 entries.append(.section(id: id, title: workspaceTitles[id] ?? String(localized: "未分组"),
                     number: index + 1, count: rows.count))
-                entries.append(contentsOf: displayedRows.map { .session($0, snippet: query.isEmpty ? nil : hits[$0.id]) })
-                if rows.count > Self.collapsedSectionLimit {
-                    entries.append(.sectionToggle(id: id,
-                        remainingCount: rows.count - Self.collapsedSectionLimit, isExpanded: isExpanded))
-                }
+                appendRows(rows, toggleID: id, limit: Self.collapsedSectionLimit)
             }
         } else {
             let toggleID = "recent-\(selection ?? selected?.id ?? "")"
-            let isExpanded = expandedSectionIDs.contains(toggleID)
-            let displayedRows = isExpanded ? scoped[...] : scoped.prefix(Self.collapsedRecentLimit)
-            entries = displayedRows.map { .session($0, snippet: query.isEmpty ? nil : hits[$0.id]) }
-            if count > Self.collapsedRecentLimit {
-                entries.append(.sectionToggle(id: toggleID,
-                    remainingCount: count - Self.collapsedRecentLimit, isExpanded: isExpanded))
-            }
+            appendRows(scoped, toggleID: toggleID, limit: Self.collapsedRecentLimit)
         }
         return WorkspaceSessionListSnapshot(entries: entries, matchingCount: count, visibleCount: visible.count)
     }
@@ -136,13 +143,13 @@ struct WorkspaceSessionListInput: Equatable, Sendable {
 
 enum WorkspaceSessionListEntry: Identifiable, Equatable, Sendable {
     case section(id: String, title: String, number: Int, count: Int)
-    case session(SessionSummary, snippet: String?)
+    case session(SessionSummary, snippet: String?, isPinned: Bool)
     case sectionToggle(id: String, remainingCount: Int, isExpanded: Bool)
 
     var id: String {
         switch self {
         case .section(let id, _, _, _): return "section-\(id)"
-        case .session(let session, _): return "session-\(session.id)"
+        case .session(let session, _, _): return "session-\(session.id)"
         case .sectionToggle(let id, _, _): return "toggle-\(id)"
         }
     }
@@ -163,18 +170,19 @@ final class WorkspaceSessionListModel: ObservableObject {
     private var observation: AnyCancellable?
     private var projection: Task<Void, Never>?
     private var isScrolling = false
+    private var displayedInput: WorkspaceSessionListInput?
     private var pendingInput: WorkspaceSessionListInput?
 
     func bind(to store: AppStore) {
         guard observation == nil else { return }
         let catalog = Publishers.CombineLatest4(store.$sessions, store.$workspaces,
             store.$archivedSessionIds, store.$selectedWorkspaceId)
-        let presentation = Publishers.CombineLatest(query, expandedSectionIDs)
+        let presentation = Publishers.CombineLatest3(query, expandedSectionIDs, store.$pinnedWorkspaceSessionIDs)
         observation = Publishers.CombineLatest4(catalog, store.$searchResults, store.$persistedTeamRouting, presentation)
             .map { catalog, hits, routing, presentation in
                 WorkspaceSessionListInput(sessions: catalog.0, workspaces: catalog.1,
                     archivedIDs: catalog.2, selection: catalog.3, searchResults: hits,
-                    routingJSON: routing, query: presentation.0, expandedSectionIDs: presentation.1)
+                    routingJSON: routing, query: presentation.0, expandedSectionIDs: presentation.1, pins: presentation.2 ?? [])
             }
             .removeDuplicates()
             // 持续状态更新也必须有进展，避免 debounce 在运行中会话上无限推迟结果。
@@ -190,7 +198,7 @@ final class WorkspaceSessionListModel: ObservableObject {
         expandedSectionIDs.send(expanded)
     }
 
-    /// 拖动和惯性滑动期间只保留最新输入，避免后台状态刷新引发列表 diff 或分区重排。
+    /// 滚动时暂缓目录和搜索刷新；切换工作区、置顶和展开分组直接更新。
     func setScrolling(_ scrolling: Bool) {
         guard isScrolling != scrolling else { return }
         isScrolling = scrolling
@@ -204,13 +212,26 @@ final class WorkspaceSessionListModel: ObservableObject {
         observation = nil
         projection?.cancel()
         projection = nil
+        displayedInput = nil
         pendingInput = nil
         isScrolling = false
     }
 
     private func receive(_ input: WorkspaceSessionListInput) {
-        if isScrolling { pendingInput = input }
-        else { update(input) }
+        if shouldDefer(input) {
+            projection?.cancel()
+            pendingInput = input
+        } else {
+            pendingInput = nil
+            update(input)
+        }
+    }
+
+    private func shouldDefer(_ input: WorkspaceSessionListInput) -> Bool {
+        guard isScrolling, let displayedInput else { return false }
+        return displayedInput.selection == input.selection
+            && displayedInput.pins == input.pins
+            && displayedInput.expandedSectionIDs == input.expandedSectionIDs
     }
 
     private func update(_ input: WorkspaceSessionListInput) {
@@ -221,10 +242,11 @@ final class WorkspaceSessionListModel: ObservableObject {
                 await worker.value
             } onCancel: { worker.cancel() }
             guard !Task.isCancelled, let self else { return }
-            guard !isScrolling else {
+            guard !shouldDefer(input) else {
                 if pendingInput == nil { pendingInput = input }
                 return
             }
+            displayedInput = input
             if snapshot != result { snapshot = result }
             if isLoading { isLoading = false }
         }

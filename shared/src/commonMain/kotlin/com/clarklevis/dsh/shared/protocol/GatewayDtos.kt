@@ -138,6 +138,7 @@ data class GatewayFrame(
     val view: String? = null,
     val query: String? = null,
     val archivedSessionIds: List<String>? = null,
+    val pinnedSessionIds: List<String>? = null,
     val workspace: GatewayWorkspace? = null,
     val created: Boolean? = null,
     val version: String? = null,

@@ -40,6 +40,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -89,12 +90,12 @@ private val rosterTextStyle = TextStyle(
 )
 
 @Composable
-internal fun BotManagementFlow(holder: AndroidSharedStateHolder, onDismiss: () -> Unit, showRole: (String) -> Unit) {
+internal fun BotManagementFlow(holder: AndroidSharedStateHolder, onDismiss: () -> Unit, showRole: (String) -> Unit, startCreating: Boolean = false) {
     val snapshot = holder.botSnapshot
     val state = snapshot.creation
     val colors = if (isSystemInDarkTheme()) managementDark else managementLight
     val canCreate = snapshot.canCreateBot
-    var page by rememberSaveable { mutableStateOf(BotManagementDestination.Roster) }
+    var page by rememberSaveable { mutableStateOf(if (startCreating) BotManagementDestination.Create else BotManagementDestination.Roster) }
     var name by rememberSaveable { mutableStateOf("") }
     var local by rememberSaveable { mutableStateOf(false) }
     var agentId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -124,7 +125,7 @@ internal fun BotManagementFlow(holder: AndroidSharedStateHolder, onDismiss: () -
         if (state.saving) return
         page = when (page) {
             BotManagementDestination.Roster -> { onDismiss(); return }
-            BotManagementDestination.Create -> BotManagementDestination.Roster
+            BotManagementDestination.Create -> if (startCreating) { onDismiss(); return } else BotManagementDestination.Roster
             BotManagementDestination.Model, BotManagementDestination.Appearance -> BotManagementDestination.Create
             BotManagementDestination.Library -> BotManagementDestination.Appearance
         }
@@ -134,7 +135,9 @@ internal fun BotManagementFlow(holder: AndroidSharedStateHolder, onDismiss: () -
     val scroll = pageScroll[page.ordinal]
     BackHandler(onBack = ::back)
     LaunchedEffect(state.createdId) {
-        if (state.createdId != null && page == BotManagementDestination.Create) page = BotManagementDestination.Roster
+        if (state.createdId != null && page == BotManagementDestination.Create) {
+            if (startCreating) onDismiss() else page = BotManagementDestination.Roster
+        }
     }
     LaunchedEffect(canCreate, page) {
         if (canCreate && page != BotManagementDestination.Roster && appearance == null && !state.loadingAppearance && !state.appearanceFailed) {
@@ -507,6 +510,9 @@ private fun ManagementPage(
     scroll: ScrollState,
     isRoster: Boolean = false,
     backEnabled: Boolean = true,
+    contentWidth: Dp = 560.dp,
+    contentInset: Dp = 24.dp,
+    nativeToolbar: Boolean = false,
     action: @Composable () -> Unit = {},
     footer: @Composable () -> Unit = {},
     content: @Composable ColumnScope.() -> Unit
@@ -518,27 +524,33 @@ private fun ManagementPage(
             if (narrow) {
                 Row(Modifier.fillMaxWidth().heightIn(min = 60.dp), verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ManagementBackButton(isRoster, colors, backEnabled, back)
+                    ManagementBackButton(isRoster, colors, backEnabled, nativeToolbar, back)
                     Text(title, Modifier.weight(1f), fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = colors.text)
                     action()
                 }
             } else {
                 Box(Modifier.fillMaxWidth().heightIn(min = 60.dp)) {
                     Text(title, Modifier.align(Alignment.Center), fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = colors.text)
-                    Box(Modifier.align(Alignment.CenterStart)) { ManagementBackButton(isRoster, colors, backEnabled, back) }
+                    Box(Modifier.align(Alignment.CenterStart)) { ManagementBackButton(isRoster, colors, backEnabled, nativeToolbar, back) }
                     Box(Modifier.align(Alignment.CenterEnd)) { action() }
                 }
             }
         }
-        Column(Modifier.weight(1f).widthIn(max = 560.dp).fillMaxWidth().verticalScroll(scroll)
-            .padding(start = 24.dp, end = 24.dp, top = 8.dp, bottom = 16.dp),
+        Column(Modifier.weight(1f).widthIn(max = contentWidth).fillMaxWidth().verticalScroll(scroll)
+            .padding(start = contentInset, end = contentInset, top = 8.dp, bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp), content = content)
-        Box(Modifier.widthIn(max = 560.dp).fillMaxWidth().padding(horizontal = 24.dp)) { footer() }
+        Box(Modifier.widthIn(max = contentWidth).fillMaxWidth().padding(horizontal = 24.dp)) { footer() }
     }
 }
 
 @Composable
-private fun ManagementBackButton(isRoster: Boolean, colors: ManagementColors, enabled: Boolean, click: () -> Unit) {
+private fun ManagementBackButton(isRoster: Boolean, colors: ManagementColors, enabled: Boolean, nativeToolbar: Boolean = false, click: () -> Unit) {
+    if (nativeToolbar) {
+        DshGlassButton(appText("取消"), click, Modifier.height(44.dp), enabled = enabled, shape = CircleShape) {
+            Text(appText("取消"), Modifier.padding(horizontal = 16.dp), fontSize = 17.sp, color = colors.accent)
+        }
+        return
+    }
     if (isRoster) {
         val back = appText("返回")
         Box(Modifier.size(44.dp).shadow(4.dp, CircleShape).managementSurface(colors, CircleShape, .75.dp)
@@ -690,3 +702,114 @@ private fun rememberManagementPhotoPicker(onBusy: (Boolean) -> Unit, onError: ()
 
 @Composable
 private fun managementError() = if (isSystemInDarkTheme()) Color(0xFFFF8A89) else Color(0xFFB3261E)
+
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun BotConversationPicker(holder: AndroidSharedStateHolder, group: Boolean, dismiss: () -> Unit) {
+    val snapshot = holder.botSnapshot
+    val draft = snapshot.conversation
+    val colors = if (isSystemInDarkTheme()) managementDark else managementLight.copy(canvas = Color(0xFFF2F2F7))
+    var query by rememberSaveable { mutableStateOf("") }
+    val candidates = holder.searchConversationBots(query)
+    val canWrite = snapshot.connected && snapshot.writable && draft.supported
+    val locked = draft.saving || draft.createdId != null || draft.uncertain
+    BackHandler { if (!draft.saving) dismiss() }
+    ManagementPage(if (group) appText("新建群聊") else appText("查找 Bot"), colors,
+        dismiss, rememberScrollState(), backEnabled = !draft.saving, contentWidth = 608.dp, contentInset = 24.dp, nativeToolbar = true, action = {
+            if (group) Box(Modifier.heightIn(min = 44.dp).dshWorkspaceGlass(CircleShape, DshGlassStyle.SUBTLE)
+                .padding(horizontal = 14.dp, vertical = 12.dp)) {
+                Text(appText("已选 %1\$s", draft.memberIds.size), color = colors.secondary, fontSize = 14.sp)
+            }
+        }, footer = {
+            if (group) Column(Modifier.padding(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                if (draft.createdId == null) Text(appText("不填写首条消息时，管理员会先询问群聊用途。"),
+                    color = colors.secondary, fontSize = 12.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                ManagementAction(if (draft.createdId == null) appText("创建群聊 · %1\$s 位 Bot", draft.memberIds.size)
+                    else appText("重试发送首条消息"), canWrite && draft.memberIds.size >= 2 && !draft.uncertain,
+                    draft.saving, Modifier.testTag("bot.group.create")) {
+                    if (draft.createdId != null) holder.retryConversationMessage() else holder.createConversationRoom()
+                }
+                if (draft.createdId != null) ManagementPill(appText("进入群聊"), colors, enabled = !draft.saving,
+                    modifier = Modifier.testTag("bot.group.enter"), onClick = holder::enterCreatedConversation)
+            }
+        }) {
+        if (group) {
+            Text(appText("选择群聊成员"), fontSize = 28.sp, fontWeight = FontWeight.SemiBold, color = colors.text)
+            Text(appText("第一位选中的成员为管理员。"), fontSize = 14.sp, lineHeight = 21.sp,
+                color = colors.secondary, modifier = Modifier.testTag("bot.group.admin-note"))
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                draft.memberIds.forEachIndexed { index, id ->
+                    val bot = snapshot.roster.firstOrNull { it.id == id } ?: return@forEachIndexed
+                    Row(Modifier.clip(CircleShape).background(colors.soft).testTag("bot.group.remove.$id")
+                        .clickable(enabled = !locked, role = Role.Button) { holder.toggleConversationMember(id) }
+                        .padding(horizontal = 10.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("${index + 1} ${bot.name}" + if (index == 0) " · " + appText("管理员") else "",
+                            color = colors.accent, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                        ManagementIcon(R.drawable.ic_close, colors.text, 12.dp)
+                    }
+                }
+            }
+        }
+        BasicTextField(query, { query = it }, Modifier.fillMaxWidth().testTag("bot.conversation.search")
+            .background(colors.card, CircleShape).padding(horizontal = 20.dp, vertical = 14.dp),
+            singleLine = true, textStyle = rosterTextStyle.copy(color = colors.text, fontSize = 17.sp),
+            cursorBrush = SolidColor(colors.accent), decorationBox = { field ->
+                Box { if (query.isEmpty()) Text(appText("搜索名称或角色"), color = colors.secondary.copy(alpha = .6f), fontSize = 17.sp); field() }
+            })
+        ManagementSection(colors) {
+            candidates.forEachIndexed { index, bot ->
+                val order = draft.memberIds.indexOf(bot.id)
+                val admin = appText("管理员")
+                val selected = appText("已选择")
+                Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).testTag("bot.conversation.member.${bot.id}")
+                    .semantics { stateDescription = if (group && order == 0) admin else if (group && order > 0) selected else "" }
+                    .clickable(enabled = if (group) !locked else !draft.saving && (!bot.hidden || canWrite), role = Role.Button) {
+                        if (group) holder.toggleConversationMember(bot.id) else holder.openConversationBot(bot.id)
+                    }.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    BotAvatar(bot, 36.dp, snapshot.isMainBot(bot.id))
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text(bot.name, color = colors.text, fontSize = 17.sp)
+                        if (bot.role.isNotBlank()) Text(bot.role, color = colors.secondary, fontSize = 13.sp)
+                    }
+                    if (group && order >= 0) {
+                        if (order == 0) Text(admin, color = colors.accent, fontSize = 12.sp)
+                        Text("${order + 1}", color = colors.accent, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+                if (index < candidates.lastIndex) ManagementDivider(colors.line.copy(alpha = .45f))
+            }
+            if (candidates.isEmpty()) Text(if (query.isBlank()) appText("还没有 Bot") else appText("没有找到相关 Bot"),
+                color = colors.secondary, modifier = Modifier.padding(16.dp))
+        }
+        ManagementCaption(appText("可选择已从侧边栏隐藏的 Bot。"), colors)
+        if (group) {
+            ManagementCaption(appText("首条消息（选填）"), colors)
+            BasicTextField(draft.message, holder::updateConversationMessage,
+                Modifier.fillMaxWidth().testTag("bot.group.message").managementSurface(colors).padding(16.dp),
+                enabled = !locked, minLines = 2, maxLines = 5,
+                textStyle = rosterTextStyle.copy(color = colors.text, fontSize = 16.sp, lineHeight = 22.sp),
+                cursorBrush = SolidColor(colors.accent), decorationBox = { field ->
+                    Box { if (draft.message.isEmpty()) Text(appText("描述群聊用途"), color = colors.secondary, fontSize = 16.sp); field() }
+                })
+        }
+        if (!canWrite) ManagementCaption(when {
+            !snapshot.connected -> appText("连接主机后可以新建会话")
+            !snapshot.writable -> appText("当前主机为只读")
+            else -> appText("请更新主机上的移动网关以新建会话")
+        }, colors)
+        if (draft.error != null) Column(Modifier.testTag("bot.conversation.error"), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(when {
+                draft.uncertain -> appText("暂时无法确认提交结果，请返回聊天列表核对，避免重复创建或发送。")
+                draft.createdId != null -> appText("群聊已创建，首条消息发送失败。")
+                else -> appText("操作失败，请重试。")
+            }, color = Color.Red, fontSize = 13.sp)
+            if (draft.errorDetail != null) Text(requireNotNull(draft.errorDetail), color = Color.Red, fontSize = 13.sp)
+            else if (!draft.uncertain) Text(requireNotNull(draft.error), color = Color.Red, fontSize = 13.sp)
+            if (draft.uncertain && draft.createdId == null) ManagementPill(appText("已核对列表，确认未创建"), colors,
+                onClick = holder::confirmConversationNotCreated)
+        }
+    }
+}

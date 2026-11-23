@@ -68,6 +68,7 @@ Join the Whaleness beta WeChat group 2 to share feedback, discuss your experienc
 
 ### Recent additions
 
+- **Bot mode**: Chat with your personal assistant in private or group conversations and view scheduled tasks. The DeepSeek Harness host must have the DS Bot plugin installed and enabled. [DS Bot on GitHub](https://github.com/Fei2411/DS-Bot)
 - **Agent teams**: View members, switch between the lead and member conversations, and inspect shared tasks with status, ownership, and links to the relevant conversation.
 - **File uploads**: Choose files in the conversation, follow upload progress, remove attachments, or retry a failed upload. Sent and generated files appear as cards that can be opened or downloaded.
 - **Text selection and tables**: Open a dedicated text-selection screen to select, select all, and copy without losing your conversation position. Read Markdown tables full screen, rotate them, copy them, or export CSV; narrow tables fit the available width and wide tables scroll horizontally.
@@ -480,6 +481,10 @@ The following documents record the KMP migration and Android implementation. For
 - [KMP development guide](Docs/kmp-development.md)
 - [Android Gateway stage 12 validation](Docs/kmp-stage12-android-gateway-verification.md)
 - [Android UI stage 13 validation](Docs/kmp-stage13-android-ui-verification.md)
+
+## Acknowledgments
+
+Thank you to Fei2411 and the DS Bot contributors for creating and maintaining the open-source DeepSeek Harness plugin that powers Bot mode in Whaleness. [Upstream DS Bot repository](https://github.com/Fei2411/DS-Bot)
 
 ## Project Status
 

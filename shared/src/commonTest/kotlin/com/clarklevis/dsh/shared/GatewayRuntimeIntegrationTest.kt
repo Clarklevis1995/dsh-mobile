@@ -104,6 +104,40 @@ class GatewayRuntimeIntegrationTest {
     }
 
     @Test
+    fun sessionPinsFollowHostSnapshotsAndMatchMutationRepliesByRequestId() = runTest {
+        val transport = FakeTransport()
+        val runtime = newRuntime(transport, clock = RecordingDelayClock())
+        val events = mutableListOf<GatewayRuntimeEvent>()
+        backgroundScope.launch { runtime.events.collect { events += it } }
+        runCurrent()
+        runtime.connect("wss://gateway.example/ws/mobile")
+        transport.opened()
+        transport.receive("""{"kind":"hello","authenticated":true,"capabilities":["session-pin-v1"]}""")
+        transport.receive("""{"kind":"session-pins","pinnedSessionIds":["web"]}""")
+        runCurrent()
+        assertEquals(listOf("web"), runtime.state.value.pinnedSessionIds)
+
+        assertTrue(runtime.sendRequest(GatewayRequests.setSessionPinned("mobile", true, "pin-1")))
+        assertTrue(runtime.sendRequest(GatewayRequests.setSessionPinned("mobile", false, "pin-2")))
+        transport.receive("""{"kind":"session-pins","pinnedSessionIds":["mobile","web"]}""")
+        transport.receive("""{"kind":"session-pin-set","sessionId":"mobile","requestId":"pin-1"}""")
+        transport.receive("""{"kind":"session-pin-set","sessionId":"mobile","requestId":"pin-1"}""")
+        runCurrent()
+        assertEquals(2, transport.sentTypes.count { it == "session-pin" })
+        assertEquals(listOf("mobile", "web"), runtime.state.value.pinnedSessionIds)
+        assertEquals(1, events.filterIsInstance<GatewayRuntimeEvent.Frame>().count { it.frame.kind == "session-pin-set" })
+
+        transport.receive("""{"kind":"error","requestType":"session-pin","sessionId":"mobile","requestId":"pin-2","code":"session/not-found"}""")
+        runCurrent()
+        assertTrue(events.filterIsInstance<GatewayRuntimeEvent.Frame>().any {
+            it.frame.requestId == "pin-2" && it.frame.code == "session/not-found"
+        })
+        transport.receive("""{"kind":"session-pins","pinnedSessionIds":[]}""")
+        runCurrent()
+        assertEquals(emptyList(), runtime.state.value.pinnedSessionIds)
+    }
+
+    @Test
     fun globalSessionStatusRefreshesHomeCatalogWithoutSelectingConversation() = runTest {
         val transport = FakeTransport()
         val runtime = newRuntime(transport, clock = RecordingDelayClock())

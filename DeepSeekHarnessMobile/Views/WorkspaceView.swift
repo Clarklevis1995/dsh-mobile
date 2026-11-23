@@ -157,6 +157,8 @@ struct WorkspaceView: View {
         }
         .foregroundStyle(isBotMode ? Color("BotInk") : .white)
         .onChangeCompat(of: isBotMode) { _, bot in
+            scrollActivity.isScrolling = false
+            sessionList.setScrolling(false)
             for scene in UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }) {
                 scene.windows.first(where: \.isKeyWindow)?.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
                 if !bot && UIDevice.current.userInterfaceIdiom == .phone {
@@ -245,7 +247,8 @@ struct WorkspaceView: View {
                         abs(translation.x) > abs(translation.y) * 1.2 && (drawerOffset > 0 ? translation.x < 0 : translation.x > 0)
                     }, onChanged: { updateDrawerDrag(translation: $0, width: drawerWidth) },
                     onEnded: { finishDrawerDrag(translation: $0, velocity: $1, cancelled: $2, width: drawerWidth) }
-                )), scrollEnabled: drawerOffset == 0 || drawerDragStart != nil)
+                )), scrollEnabled: drawerOffset == 0 || drawerDragStart != nil,
+                onScrollActivityChanged: { scrollActivity.isScrolling = $0 })
         } else {
         ScrollView {
             VStack(alignment: .leading, spacing: usesColumns ? 40 : 18) {
@@ -287,9 +290,8 @@ struct WorkspaceView: View {
         .scrollDismissesKeyboard(.interactively)
         .scrollDisabled(drawerDragStart == nil && drawerOffset > 0)
         .accessibilityIdentifier("workspace-session-list")
-        .modifier(WorkspaceScrollPhaseObserver { active in
-            guard scrollActivity.isScrolling != active else { return }
-            scrollActivity.isScrolling = active
+        .modifier(WorkspaceScrollPhaseObserver(includesTouchTracking: false) { active in
+            if scrollActivity.isScrolling != active { scrollActivity.isScrolling = active }
             sessionList.setScrolling(active)
         })
         .onTapGesture { sessionSearchIsFocused = false }
@@ -749,26 +751,58 @@ struct WorkspaceView: View {
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("workspace-section-toggle-\(id)")
-        case .session(let session, let snippet):
-            Button {
-                sessionSearchIsFocused = false
-                onOpenSession(session)
-            } label: {
-                WorkspaceSessionRow(session: session, snippet: snippet)
-                    .equatable()
+        case .session(let session, let snippet, let isPinned):
+            sessionRow(session, snippet: snippet, isPinned: isPinned)
+        }
+    }
+
+    private func sessionRow(_ session: SessionSummary, snippet: String?, isPinned: Bool) -> some View {
+        let open = {
+            sessionSearchIsFocused = false
+            onOpenSession(session)
+        }
+        let actions = [
+            WorkspaceSessionMenuAction(title: String(localized: "复制对话 ID"), icon: "document.on.document") {
+                UIPasteboard.general.string = session.id
+            },
+            WorkspaceSessionMenuAction(title: isPinned ? String(localized: "取消置顶") : String(localized: "置顶"),
+                                       icon: isPinned ? "pin.slash" : "pin",
+                                       enabled: connectionIsReady && store.pinnedWorkspaceSessionIDs != nil) {
+                store.setWorkspaceSessionPinned(session.id, pinned: !isPinned)
+            },
+            WorkspaceSessionMenuAction(title: String(localized: "重命名"), icon: "pencil", enabled: connectionIsReady) {
+                renamedTitle = session.title
+                renamingSession = session
+            },
+            WorkspaceSessionMenuAction(title: String(localized: "删除（归档）"), icon: "archivebox",
+                                       enabled: connectionIsReady, destructive: true) {
+                archivingSession = session
             }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("workspace-session-\(session.id)")
-            .contextMenu {
-                Button {
-                    renamedTitle = session.title
-                    renamingSession = session
-                } label: { Label("重命名", systemImage: "pencil") }
-                .disabled(!connectionIsReady)
-                Button(role: .destructive) {
-                    archivingSession = session
-                } label: { Label("删除（归档）", systemImage: "archivebox") }
-                .disabled(!connectionIsReady)
+        ]
+        let row = WorkspaceSessionRow(session: session, snippet: snippet, isPinned: isPinned).equatable()
+        let identifier = "workspace-session-\(session.id)"
+        return Group {
+            if UIDevice.current.userInterfaceIdiom == .pad {
+                let detail = snippet ?? String(session.id.prefix(16))
+                let status = session.isRunning ? String(localized: "运行中")
+                    : session.lastActivity.formatted(.relative(presentation: .named))
+                row.accessibilityHidden(true)
+                    .overlay {
+                        WorkspaceSessionMenuControl(label: [session.title, detail, status].joined(separator: ", "),
+                            identifier: identifier, actions: actions, open: open)
+                    }
+            } else {
+                Button(action: open) { row }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier(identifier)
+                    .contextMenu {
+                        ForEach(actions, id: \.icon) { item in
+                            Button(role: item.destructive ? .destructive : nil, action: item.perform) {
+                                Label(item.title, systemImage: item.icon)
+                            }
+                            .disabled(!item.enabled)
+                        }
+                    }
             }
         }
     }
@@ -807,6 +841,71 @@ struct WorkspaceView: View {
     }
 }
 
+private struct WorkspaceSessionMenuAction {
+    let title: String
+    let icon: String
+    var enabled = true
+    var destructive = false
+    let perform: () -> Void
+}
+
+private struct WorkspaceSessionMenuControl: UIViewRepresentable {
+    let label: String
+    let identifier: String
+    let actions: [WorkspaceSessionMenuAction]
+    let open: () -> Void
+
+    func makeUIView(context: Context) -> Control {
+        let control = Control()
+        control.isContextMenuInteractionEnabled = true
+        control.isAccessibilityElement = true
+        control.accessibilityTraits = .button
+        control.addAction(UIAction { [weak control] _ in control?.open?() }, for: .touchUpInside)
+        return control
+    }
+
+    func updateUIView(_ control: Control, context: Context) {
+        control.open = open
+        control.actions = actions
+        control.accessibilityLabel = label
+        control.accessibilityIdentifier = identifier
+        control.accessibilityCustomActions = actions.filter(\.enabled).map { item in
+            UIAccessibilityCustomAction(name: item.title) { _ in
+                item.perform()
+                return true
+            }
+        }
+    }
+
+    final class Control: UIButton {
+        var open: (() -> Void)?
+        var actions: [WorkspaceSessionMenuAction] = []
+        private var pressLocation: CGPoint?
+
+        override func contextMenuInteraction(_ interaction: UIContextMenuInteraction,
+            configurationForMenuAtLocation location: CGPoint) -> UIContextMenuConfiguration? {
+            pressLocation = location
+            let items = actions.map { item in
+                var attributes: UIMenuElement.Attributes = item.destructive ? [.destructive] : []
+                if !item.enabled { attributes.insert(.disabled) }
+                return UIAction(title: item.title, image: UIImage(systemName: item.icon), attributes: attributes) { _ in
+                    item.perform()
+                }
+            }
+            return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { _ in UIMenu(children: items) }
+        }
+
+        override func menuAttachmentPoint(for configuration: UIContextMenuConfiguration) -> CGPoint {
+            pressLocation ?? super.menuAttachmentPoint(for: configuration)
+        }
+
+        override func accessibilityActivate() -> Bool {
+            open?()
+            return true
+        }
+    }
+}
+
 #if DEBUG
 /// 仅回归测试启用，不在实际滚动中挂载逐行 GeometryReader。
 struct WorkspaceSessionFrameProbe: PreferenceKey {
@@ -839,6 +938,7 @@ private struct WorkspaceScrollBackground: View {
 
 /// 原生滚动阶段覆盖拖动、惯性与程序动画；只在活动/空闲边界通知，不逐帧刷新 SwiftUI 状态。
 struct WorkspaceScrollPhaseObserver: ViewModifier {
+    var includesTouchTracking = true
     let onChange: (Bool) -> Void
     #if DEBUG
     static var didChangeForTesting: ((Bool) -> Void)?
@@ -848,7 +948,7 @@ struct WorkspaceScrollPhaseObserver: ViewModifier {
     func body(content: Content) -> some View {
         if #available(iOS 18.0, *) {
             content.onScrollPhaseChange { _, phase in
-                let active = phase != .idle
+                let active = phase != .idle && (includesTouchTracking || phase != .tracking)
                 onChange(active)
                 #if DEBUG
                 Self.didChangeForTesting?(active)
@@ -864,6 +964,7 @@ struct WorkspaceScrollPhaseObserver: ViewModifier {
 private struct WorkspaceSessionRow: View, Equatable {
     let session: SessionSummary
     let snippet: String?
+    let isPinned: Bool
 
     var body: some View {
         VStack(spacing: 0) {
@@ -872,7 +973,13 @@ private struct WorkspaceSessionRow: View, Equatable {
                     .fill(session.isRunning ? DSHColor.success : (session.hasUnread ? DSHColor.ocean : .white.opacity(0.35)))
                     .frame(width: 7, height: 7)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(session.title).lineLimit(1).appFont(.subheadline.weight(.medium))
+                    HStack(spacing: 5) {
+                        if isPinned {
+                            Image(systemName: "pin.fill").appFont(.caption2)
+                                .foregroundStyle(.secondary).accessibilityHidden(true)
+                        }
+                        Text(session.title).lineLimit(1).appFont(.subheadline.weight(.medium))
+                    }
                     if let snippet {
                         Text(snippet).lineLimit(2).appFont(.caption).foregroundStyle(.white.opacity(0.62))
                     } else {

@@ -220,7 +220,7 @@ private enum BotCreationDestination: String, Identifiable {
     var id: String { rawValue }
 }
 
-private struct BotCreationView: View {
+struct BotCreationView: View {
     @ObservedObject var model: BotModeModel
     @Environment(\.dismiss) private var dismiss
     @State private var look: BotCreationLook?
@@ -471,7 +471,7 @@ private struct BotCreationFace: View {
             if tile { RoundedRectangle(cornerRadius: size * 0.28).fill(Color("BotLavenderSoft")) }
             if let image {
                 BotFace(chat: BotChat(id: "creation-preview", name: "", room: false, role: "", preview: "",
-                    image: image, lastAt: 0, running: false, part: 0, imageRef: nil, memberIds: [], sessionId: nil, profile: nil), size: size)
+                    image: image, lastAt: 0, running: false, part: 0, imageRef: nil, memberIds: [], sessionId: nil, profile: nil, hidden: false), size: size)
             }
         }.frame(width: size, height: size).accessibilityHidden(true)
     }
@@ -635,5 +635,165 @@ private struct BotAvatarLibraryView: View {
                 model.importCreationPhoto(photo, name: String(localized: "照片"))
             } } catch { if !Task.isCancelled { photoError = true } }
         }
+    }
+}
+
+
+/// 与 Web 共用团队数据：隐藏只影响侧边栏，不影响新对话和成员选择。
+struct BotConversationPicker: View {
+    @ObservedObject var model: BotModeModel
+    let group: Bool
+    let openChat: (String) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var query = ""
+    private var draft: BotConversationState { model.snapshot.conversation }
+    private var canWrite: Bool { model.snapshot.connected && model.snapshot.writable && draft.supported }
+    private var locked: Bool { draft.saving || draft.createdId != nil || draft.uncertain }
+    private var candidates: [BotChat] { model.conversationBots(query) }
+
+    var body: some View {
+        List {
+            if group {
+                Section {
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("选择群聊成员").appFont(.system(size: 28, weight: .semibold))
+                        Text("第一位选中的成员为管理员。")
+                            .appFont(.system(size: 14)).foregroundStyle(.secondary)
+                            .accessibilityIdentifier("bot.group.admin-note")
+                        if !draft.memberIds.isEmpty {
+                            ConversationMemberFlow(spacing: 8) {
+                                ForEach(Array(draft.memberIds.enumerated()), id: \.element) { index, id in
+                                    if let bot = model.snapshot.roster.first(where: { $0.id == id }) {
+                                        Button { model.toggleConversationMember(id) } label: {
+                                            HStack(spacing: 6) {
+                                                Text("\(index + 1) \(bot.name)" + (index == 0 ? " · " + String(localized: "管理员") : ""))
+                                                Image(systemName: "xmark").font(.system(size: 10, weight: .semibold))
+                                            }.appFont(.system(size: 13, weight: .medium)).padding(.horizontal, 10).padding(.vertical, 8)
+                                                .foregroundStyle(BotManagementStyle.accent).background(Color("BotLavenderSoft"), in: Capsule())
+                                        }.buttonStyle(.plain).disabled(locked)
+                                            .accessibilityLabel(Text("移除 \(bot.name)"))
+                                            .accessibilityIdentifier("bot.group.remove." + id)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }.listRowBackground(Color.clear).listRowSeparator(.hidden)
+                    .listRowInsets(EdgeInsets(top: 8, leading: 8, bottom: 0, trailing: 8))
+            }
+            Section {
+                TextField("搜索名称或角色", text: $query)
+                    .textInputAutocapitalization(.never).autocorrectionDisabled()
+                    .accessibilityIdentifier("bot.conversation.search")
+            }
+            Section {
+                ForEach(candidates, id: \.id) { bot in
+                    Button {
+                        if group { model.toggleConversationMember(bot.id) }
+                        else { model.openConversationBot(bot.id) }
+                    } label: {
+                        HStack(spacing: 12) {
+                            BotAvatar(chat: bot, size: 36, main: model.snapshot.isMainBot(id: bot.id))
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(bot.name).appFont(.system(size: 17)).foregroundStyle(Color("BotInk"))
+                                if !bot.role.isEmpty { Text(bot.role).appFont(.system(size: 13)).foregroundStyle(BotManagementStyle.secondary) }
+                            }
+                            Spacer(minLength: 6)
+                            if group, let index = draft.memberIds.firstIndex(of: bot.id) {
+                                if index == 0 { Text("管理员").appFont(.system(size: 12)) }
+                                Text("\(index + 1)").appFont(.system(size: 14, weight: .semibold))
+                            }
+                        }.foregroundStyle(BotManagementStyle.accent).frame(minHeight: 44).contentShape(Rectangle())
+                    }.buttonStyle(.plain)
+                        .disabled(group ? locked : (draft.saving || (bot.hidden && !canWrite)))
+                        .accessibilityIdentifier("bot.conversation.member." + bot.id)
+                        .accessibilityValue(group ? (draft.adminId == bot.id ? String(localized: "管理员") :
+                            (draft.memberIds.contains(bot.id) ? String(localized: "已选择") : "")) : "")
+                }
+                if candidates.isEmpty {
+                    Text(LocalizedStringKey(query.isEmpty ? "还没有 Bot" : "没有找到相关 Bot")).foregroundStyle(.secondary)
+                }
+            } footer: { Text("可选择已从侧边栏隐藏的 Bot。") }
+            if group {
+                Section {
+                    TextField("描述群聊用途", text: Binding(get: { draft.message }, set: model.updateConversationMessage), axis: .vertical)
+                        .lineLimit(2...5).disabled(locked).accessibilityIdentifier("bot.group.message")
+                } header: { Text("首条消息（选填）") }
+            }
+            if !canWrite {
+                Text(LocalizedStringKey(!model.snapshot.connected ? "连接主机后可以新建会话" :
+                    !model.snapshot.writable ? "当前主机为只读" : "请更新主机上的移动网关以新建会话"))
+                    .appFont(.system(size: 13)).foregroundStyle(.secondary)
+            }
+            if let error = draft.error {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(LocalizedStringKey(draft.uncertain ? "暂时无法确认提交结果，请返回聊天列表核对，避免重复创建或发送。" :
+                        draft.createdId != nil ? "群聊已创建，首条消息发送失败。" : "操作失败，请重试。"))
+                    if let detail = draft.errorDetail { Text(detail) }
+                    else if !draft.uncertain { Text(error) }
+                    if draft.uncertain && draft.createdId == nil {
+                        Button("已核对列表，确认未创建") { model.confirmConversationNotCreated() }
+                            .foregroundStyle(BotManagementStyle.accent)
+                    }
+                }.appFont(.system(size: 13)).foregroundStyle(.red).accessibilityIdentifier("bot.conversation.error")
+            }
+        }
+        .listStyle(.insetGrouped).scrollDismissesKeyboard(.interactively)
+        .scrollContentBackground(.hidden).frame(maxWidth: 608).frame(maxWidth: .infinity)
+        .background(Color(uiColor: .systemGroupedBackground).ignoresSafeArea())
+        .navigationTitle(Text(group ? LocalizedStringKey("新建群聊") : LocalizedStringKey("查找 Bot")))
+        .navigationBarTitleDisplayMode(.inline).toolbar(.visible, for: .navigationBar)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() }.disabled(draft.saving) }
+            if group { ToolbarItem(placement: .topBarTrailing) {
+                Text(String(format: String(localized: "已选 %lld"), draft.memberIds.count)).foregroundStyle(.secondary).appFont(.system(size: 14))
+            } }
+        }
+        .navigationBarBackButtonHidden(true).tint(BotManagementStyle.accent)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if group {
+                VStack(spacing: 12) {
+                    if draft.createdId == nil {
+                        Text("不填写首条消息时，管理员会先询问群聊用途。")
+                            .appFont(.system(size: 12)).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                    }
+                    BotManagementAction(title: LocalizedStringKey(draft.createdId != nil ? "重试发送首条消息" :
+                        String(format: String(localized: "创建群聊 · %lld 位 Bot"), draft.memberIds.count)),
+                        enabled: canWrite && draft.memberIds.count >= 2 && !draft.uncertain, busy: draft.saving) {
+                        if draft.createdId != nil { model.retryConversationMessage() } else { model.createConversationRoom() }
+                    }.accessibilityIdentifier("bot.group.create")
+                    if draft.createdId != nil {
+                        Button("进入群聊") { model.enterCreatedConversation() }.disabled(draft.saving)
+                            .accessibilityIdentifier("bot.group.enter")
+                    }
+                }.padding(.horizontal, 24).padding(.vertical, 12).frame(maxWidth: 608).frame(maxWidth: .infinity)
+                    .background(.bar)
+            }
+        }
+        .onChangeCompat(of: draft.openedId) { _, id in if let id { openChat(id) } }
+    }
+}
+
+private struct ConversationMemberFlow: Layout {
+    var spacing: CGFloat
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        layout(width: proposal.width ?? 560, subviews: subviews).size
+    }
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let result = layout(width: bounds.width, subviews: subviews)
+        for (index, point) in result.points.enumerated() {
+            subviews[index].place(at: CGPoint(x: bounds.minX + point.x, y: bounds.minY + point.y), anchor: .topLeading,
+                proposal: ProposedViewSize(width: min(subviews[index].sizeThatFits(.unspecified).width, bounds.width), height: nil))
+        }
+    }
+    private func layout(width: CGFloat, subviews: Subviews) -> (size: CGSize, points: [CGPoint]) {
+        var x: CGFloat = 0; var y: CGFloat = 0; var row: CGFloat = 0
+        var points: [CGPoint] = []
+        for view in subviews {
+            let size = view.sizeThatFits(ProposedViewSize(width: width, height: nil))
+            if x > 0 && x + size.width > width { x = 0; y += row + spacing; row = 0 }
+            points.append(CGPoint(x: x, y: y)); x += min(size.width, width) + spacing; row = max(row, size.height)
+        }
+        return (CGSize(width: width, height: y + row), points)
     }
 }

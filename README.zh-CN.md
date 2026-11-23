@@ -68,6 +68,7 @@ Whaleness 是独立开发的 DeepSeek Harness 第三方原生移动客户端。�
 
 ### 近期新增与改进
 
+- **Bot 模式**：在移动端与个人助理私聊、参与群聊并查看定时任务。使用前请在 DeepSeek Harness 主机上安装并启用 DS Bot 插件。[DS Bot 项目](https://github.com/Fei2411/DS-Bot)
 - **智能体团队**：查看团队成员，在 Lead 与子 Agent 会话之间切换；通过共享任务看板查看任务状态、归属与关联会话。
 - **文件上传**：在会话中选择文件，查看上传进度、移除附件或重试失败上传；已发送文件和生成文件以卡片展示，可继续打开或下载。
 - **文字选择与表格阅读**：通过独立页面选择、全选和复制正文，关闭后保留会话阅读位置。Markdown 表格支持全屏查看、旋转、复制和导出 CSV；少列表格适应可用宽度，宽表格可横向滚动。
@@ -478,6 +479,10 @@ iOS 测试可在 Xcode 中选择 `DeepSeekHarnessMobile` Scheme 后执行 **Prod
 - [KMP 开发说明](Docs/kmp-development.md)
 - [Android Gateway 阶段 12 验证记录](Docs/kmp-stage12-android-gateway-verification.md)
 - [Android UI 阶段 13 验证记录](Docs/kmp-stage13-android-ui-verification.md)
+
+## 致谢
+
+感谢 Fei2411 和 DS Bot 的所有贡献者创建并维护这个开源 DeepSeek Harness 插件，为 Whaleness 的 Bot 模式提供支持。[DS Bot 上游仓库](https://github.com/Fei2411/DS-Bot)
 
 ## 当前状态
 

@@ -15,6 +15,182 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class SharedBotStoreTest {
+    private fun conversationStore(readOnly: Boolean = false): SharedBotStore {
+        val store = SharedBotStore()
+        val start = store.activate(true, true)
+        val subscription = start.requests.first { it.payload.contains("bot-subscribe") }.correlationId
+        store.acceptJson("""{"kind":"bot-subscribed","requestId":"$subscription","hello":{"capabilities":["bot-conversations"]}}""")
+        response(store, start, "state", """{"revision":1,"readOnly":$readOnly,"bots":[
+            {"id":"a","name":"Chief","role":"主管"},{"id":"b","name":"研究员","hidden":true},
+            {"id":"c","name":"Studio"}],"rooms":[]}""")
+        return store
+    }
+
+    @Test
+    fun groupSelectionPreservesOrderPromotesAdminAndIncludesHiddenBots() {
+        val store = conversationStore()
+        assertEquals("b", store.searchConversationBots("研究").single().id)
+        assertEquals("a", store.searchConversationBots("主管").single().id)
+        listOf("b", "a", "c", "b", "b").forEach { store.toggleConversationMember(it) }
+        assertEquals(listOf("a", "c", "b"), store.snapshot().conversation.memberIds)
+        assertEquals("a", store.snapshot().conversation.adminId)
+        val submit = store.createConversationRoom()
+        val payload = Json.parseToJsonElement(submit.requests.single().payload).jsonObject["payload"]!!.jsonObject
+        assertEquals("a", payload["admin"]!!.jsonPrimitive.content)
+        assertEquals("""["a","c","b"]""", payload["members"].toString())
+        assertEquals("true", payload["greet"].toString())
+        assertTrue(store.createConversationRoom().requests.isEmpty())
+        store.toggleConversationMember("a")
+        assertEquals("a", store.snapshot().conversation.adminId)
+        response(store, submit, "create-room", """{"id":"new","name":"主机命名","members":["a","c","b"]}""")
+        assertEquals("new", store.snapshot().conversation.openedId)
+    }
+
+    @Test
+    fun groupFirstMessageWaitsForRoomAndNeverCreatesTwiceOnFailure() {
+        val store = conversationStore()
+        store.toggleConversationMember("a"); store.toggleConversationMember("b")
+        store.updateConversationMessage("  请汇总  ")
+        val submit = store.createConversationRoom()
+        assertFalse(submit.requests.single().payload.contains("greet"))
+        val created = response(store, submit, "create-room", """{"id":"new","name":"主机命名","members":["a","b"]}""")
+        assertNull(store.snapshot().conversation.openedId)
+        val send = created.requests.single { it.payload.contains("\"endpoint\":\"send\"") }
+        assertTrue(send.payload.contains("请汇总"))
+        store.acceptJson("""{"kind":"error","requestId":"${send.correlationId}","code":"bot/denied","message":"主机错误"}""")
+        assertEquals("主机错误", store.snapshot().conversation.errorDetail)
+        assertEquals("  请汇总  ", store.snapshot().conversation.message)
+        assertEquals("new", store.snapshot().conversation.createdId)
+        assertTrue(store.createConversationRoom().requests.isEmpty())
+        val retry = store.retryConversationMessage()
+        assertTrue(retry.requests.single().payload.contains("\"endpoint\":\"send\""))
+        response(store, retry, "send", "true")
+        assertEquals("new", store.snapshot().conversation.openedId)
+    }
+
+    @Test
+    fun preCreateStateReplyCannotRemoveNewRoomDuringNavigation() {
+        val store = conversationStore()
+        val earlier = store.refresh()
+        store.toggleConversationMember("a"); store.toggleConversationMember("b")
+        val created = response(store, store.createConversationRoom(), "create-room",
+            """{"id":"new","name":"自动群名","members":["a","b"]}""")
+        response(store, earlier, "state", """{"revision":2,"bots":[],"rooms":[]}""")
+        assertTrue(store.snapshot().chats.any { it.id == "new" })
+        assertEquals("new", store.snapshot().conversation.openedId)
+        assertTrue(created.requests.any { it.payload.contains("\"endpoint\":\"state\"") })
+    }
+
+    @Test
+    fun groupTimeoutRetainsDraftAndBlocksDuplicateCreateAcrossReconnect() {
+        val store = conversationStore()
+        store.toggleConversationMember("a"); store.toggleConversationMember("b")
+        store.updateConversationMessage("草稿")
+        val request = store.createConversationRoom().requests.single()
+        store.requestFailed(requireNotNull(request.correlationId), "bot-timeout")
+        assertTrue(store.snapshot().conversation.uncertain)
+        assertEquals("草稿", store.snapshot().conversation.message)
+        assertTrue(store.createConversationRoom().requests.isEmpty())
+        store.connectionChanged(true, false)
+        store.connectionChanged(true, true)
+        assertTrue(store.snapshot().conversation.uncertain)
+        store.confirmConversationNotCreated()
+        assertFalse(store.snapshot().conversation.uncertain)
+        assertEquals("草稿", store.snapshot().conversation.message)
+        assertEquals(listOf("a", "b"), store.snapshot().conversation.memberIds)
+    }
+
+    @Test
+    fun openingHiddenBotRestoresOnlyItsVisibilityAndUsesExistingHistory() {
+        val store = conversationStore()
+        val restored = store.openConversationBot("b")
+        assertTrue(store.snapshot().conversation.saving)
+        val request = restored.requests.single()
+        assertTrue(request.payload.contains("set-flags"))
+        assertFalse(request.payload.contains("session-create"))
+        response(store, restored, "set-flags", """{"id":"b"}""")
+        assertEquals("b", store.snapshot().conversation.openedId)
+        assertFalse(store.snapshot().chats.single { it.id == "b" }.hidden)
+        assertTrue(store.selectChat("b").requests.any { it.payload.contains("chat") })
+    }
+
+    @Test
+    fun groupCreationRequiresWritableHostCapabilityAndTwoLiveBots() {
+        val store = conversationStore()
+        store.toggleConversationMember("a")
+        assertTrue(store.createConversationRoom().requests.isEmpty())
+        val readOnly = conversationStore(true)
+        readOnly.toggleConversationMember("a"); readOnly.toggleConversationMember("b")
+        assertTrue(readOnly.createConversationRoom().requests.isEmpty())
+        assertTrue(readOnly.openConversationBot("b").requests.isEmpty())
+        store.connectionChanged(true, false)
+        assertTrue(store.createConversationRoom().requests.isEmpty())
+    }
+
+    @Test
+    fun sidebarHidingPreservesGroupMembersAvatarsAndSelectedGroup() {
+        val store = SharedBotStore()
+        fun team(revision: Int, hidden: Boolean) = """{"revision":$revision,"mainBotId":"chief",
+            "bots":[{"id":"chief","name":"Chief"},
+                {"id":"researcher","name":"研究员","hidden":$hidden,"avatar":{"imageRef":"research-avatar"}}],
+            "rooms":[{"id":"room","name":"项目组","members":["chief","researcher"]}]}"""
+        response(store, store.activate(true, true), "state", team(1, false))
+        response(store, store.selectChat("room"), "room-chat",
+            """{"items":[{"id":"post","kind":"bot","botId":"researcher","name":"研究员","text":"研究结论"}]}""")
+        response(store, store.refresh(), "state", team(2, true))
+
+        val snapshot = store.snapshot()
+        assertEquals("room", snapshot.selectedChatId)
+        assertEquals("researcher", snapshot.messages.single().botId)
+        assertEquals(listOf("chief", "researcher"), snapshot.roster.map { it.id })
+        assertEquals(listOf("chief", "researcher"), snapshot.chats.single { it.room }.memberIds)
+        assertTrue(snapshot.chats.single { it.id == "researcher" }.hidden)
+        assertEquals(listOf("room"), store.searchChats("").map { it.id })
+        assertEquals("room", store.searchChats("项目组").single().id)
+        assertTrue(store.searchChats("研究员").isEmpty())
+
+        val restored = SharedBotStore()
+        restored.restoreCacheJson(store.exportCacheJson())
+        assertEquals(listOf("chief", "researcher"), restored.snapshot().roster.map { it.id })
+        assertEquals(listOf("room"), restored.searchChats("").map { it.id })
+
+        response(store, store.refresh(), "state", team(3, false))
+        assertEquals(setOf("researcher", "room"), store.searchChats("").map { it.id }.toSet())
+    }
+
+    @Test
+    fun initiallyHiddenMemberStillLoadsItsGroupAvatar() {
+        val store = SharedBotStore()
+        val loaded = response(store, store.activate(true, true), "state", """{"revision":1,
+            "bots":[{"id":"researcher","name":"研究员","hidden":true,"avatar":{"imageRef":"avatar-v1"}}],
+            "rooms":[{"id":"room","name":"项目组","members":["researcher"]}]}""")
+        val image = "data:image/png;base64,aGVsbG8="
+        response(store, loaded, "avatar",
+            """{"botId":"researcher","ref":"avatar-v1","image":"$image"}""")
+        val room = store.searchChats("").single()
+        assertEquals("room", room.id)
+        val member = store.snapshot().chats.single { it.id == room.memberIds.single() }
+        assertEquals("研究员", member.name)
+        assertEquals(image, member.image)
+        assertTrue(member.hidden)
+    }
+
+    @Test
+    fun hiddenGroupHasItsOwnVisibilityAndMainBotRemainsAvailable() {
+        val store = SharedBotStore()
+        response(store, store.activate(true, true), "state", """{"revision":1,"mainBotId":"chief",
+            "mainBotIds":["chief","deputy"],
+            "bots":[{"id":"chief","name":"Chief","hidden":true},
+                {"id":"deputy","name":"Deputy","hidden":true},{"id":"worker","name":"Worker"}],
+            "rooms":[{"id":"hidden-group","name":"Hidden","hidden":true,"members":["worker"]},
+                {"id":"visible-group","name":"Visible","members":["worker"]}]}""")
+        assertEquals(setOf("deputy", "worker", "visible-group"), store.searchChats("").map { it.id }.toSet())
+        assertTrue(store.searchChats("Hidden").isEmpty())
+        assertEquals("chief", store.searchChats("Chief").single().id)
+        assertEquals(5, store.snapshot().chats.size)
+        assertTrue(store.selectChat("hidden-group").requests.any { it.payload.contains("room-chat") })
+    }
+
     @Test
     fun homeSearchMatchesNamesAndCachedMessagesWithoutSelectingAChat() {
         val store = SharedBotStore()
