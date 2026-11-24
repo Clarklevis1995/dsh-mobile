@@ -81,6 +81,7 @@ class BotDesignDeviceTest {
             "empty", "loading", "error" -> "-empty"
             "unread-overflow" -> "-long"
             "long", "markdown-images", "files", "bubble-widths", "role-profile", "page-parity" -> "-$scenario"
+            "navigation" -> "-page-parity"
             "role-schedule" -> "-role-profile"
             "images", "image-error" -> "-images"
             else -> ""
@@ -223,6 +224,131 @@ class BotDesignDeviceTest {
                         swipe(center, center - androidx.compose.ui.geometry.Offset(0f, 68.dp.toPx()), durationMillis = 600)
                     }
                     capture("scrolled-under-status")
+                }
+                return
+            }
+            if (scenario == "navigation") {
+                device.setRotation(if (largeDevice && args.getString("botTabletPortrait") != "1") landscapeRotation else portraitRotation)
+                val roster = compose.onNodeWithTag("bot.roster").performScrollTo()
+                val initialLeft = roster.getUnclippedBoundsInRoot().left
+                compose.mainClock.autoAdvance = false
+                roster.performClick()
+                compose.mainClock.advanceTimeBy(80)
+                val enteringLeft = compose.onNodeWithTag("bot.new").getUnclippedBoundsInRoot().left
+                check(roster.getUnclippedBoundsInRoot().left < initialLeft) { "推入时旧页面应向左后退" }
+                capture("navigation-push-midpoint")
+                // 动画期间重复点击原页面，不应再叠一层相同目的地。
+                roster.performClick()
+                compose.mainClock.autoAdvance = true
+                compose.waitForIdle()
+                val newBot = compose.onNodeWithTag("bot.new")
+                check(enteringLeft > newBot.getUnclippedBoundsInRoot().left + 20.dp) { "新页面应从右侧进入" }
+                newBot.performClick()
+                val name = compose.onNodeWithTag("bot.create.name").performScrollTo()
+                name.performTextInput("导航草稿")
+                compose.onNodeWithTag("bot.create.appearance").performScrollTo().performClick()
+                compose.onNodeWithText("头像库").performScrollTo().performClick()
+                androidx.test.espresso.Espresso.pressBack()
+                compose.onNodeWithText("形状").assertIsDisplayed()
+                androidx.test.espresso.Espresso.pressBack()
+                name.performScrollTo().assertTextContains("导航草稿")
+                if (largeDevice) {
+                    val portrait = args.getString("botTabletPortrait") == "1"
+                    device.setRotation(if (portrait) landscapeRotation else portraitRotation)
+                    val rotated = if (portrait) android.content.res.Configuration.ORIENTATION_LANDSCAPE else android.content.res.Configuration.ORIENTATION_PORTRAIT
+                    compose.waitUntil(5_000) { activity?.resources?.configuration?.orientation == rotated }
+                    name.performScrollTo().assertTextContains("导航草稿")
+                    capture("navigation-rotated-draft")
+                    device.setRotation(if (portrait) portraitRotation else landscapeRotation)
+                    val restored = if (portrait) android.content.res.Configuration.ORIENTATION_PORTRAIT else android.content.res.Configuration.ORIENTATION_LANDSCAPE
+                    compose.waitUntil(5_000) { activity?.resources?.configuration?.orientation == restored }
+                }
+                androidx.test.espresso.Espresso.pressBack()
+                newBot.assertIsDisplayed()
+                val rosterLeft = newBot.getUnclippedBoundsInRoot().left
+                compose.mainClock.autoAdvance = false
+                compose.onNodeWithContentDescription("返回").performClick()
+                compose.mainClock.advanceTimeBy(80)
+                check(newBot.getUnclippedBoundsInRoot().left > rosterLeft) { "返回时当前页面应向右退出" }
+                capture("navigation-pop-midpoint")
+                compose.mainClock.autoAdvance = true
+                compose.waitForIdle()
+                roster.assertIsDisplayed()
+                newBot.assertDoesNotExist()
+                capture("navigation-restored-home")
+                // 角色弹层内部也必须逐层返回，不能关闭整个弹层。
+                compose.onNodeWithTag("bot.chief").performScrollTo().performClick()
+                compose.waitForIdle()
+                compose.onNodeWithTag("bot.role-settings").assertIsDisplayed()
+                compose.mainClock.autoAdvance = false
+                compose.onNodeWithTag("bot.role-settings").performClick()
+                compose.mainClock.advanceTimeBy(80)
+                check(compose.onAllNodesWithTag("bot.role-panel").fetchSemanticsNodes().size == 2) {
+                    "角色设置转场中应同时保留旧页和新页"
+                }
+                capture("navigation-role-midpoint")
+                compose.mainClock.autoAdvance = true
+                compose.waitForIdle()
+                val panel = compose.onNodeWithTag("bot.role-panel")
+                val memory = hasText("记忆") and hasAnyAncestor(hasTestTag("bot.role-panel"))
+                panel.performScrollToNode(memory)
+                compose.onNode(memory).performClick()
+                compose.onNodeWithTag("bot.role-memory-add").performClick()
+                compose.onNodeWithTag("bot.memory-editor").performTextInput("导航记忆草稿")
+                // 编辑时系统返回先收键盘；工具栏返回应直接退回记忆列表。
+                compose.onNodeWithTag("bot.role-back").performClick()
+                compose.onNodeWithTag("bot.role-memory-add").assertIsDisplayed()
+                androidx.test.espresso.Espresso.pressBack()
+                compose.onNodeWithTag("bot.panel-heading").assertTextContains("角色设置")
+                androidx.test.espresso.Espresso.pressBack()
+                compose.onNodeWithTag("bot.role-settings").assertIsDisplayed()
+                compose.onNodeWithTag("bot.role-close").performClick()
+                roster.assertIsDisplayed()
+                capture("navigation-nested-back-stack")
+                return
+            }
+            if (scenario == "conversation-keyboard") {
+                device.setRotation(if (largeDevice && args.getString("botTabletPortrait") != "1") landscapeRotation else portraitRotation)
+                withBotSoftwareKeyboard { keyboard ->
+                    compose.onNodeWithTag("bot.conversation.new").performScrollTo().performClick()
+                    compose.onNodeWithTag("bot.conversation.group").performClick()
+                    val search = compose.onNodeWithTag("bot.conversation.search")
+                    search.performScrollTo().performTouchInput { click() }
+                    compose.waitUntil(5_000) { keyboard() != null }
+                    search.assertIsFocused().performTextInput("研究")
+                    search.performTouchInput { click() }
+                    search.assertIsFocused()
+                    check(keyboard() != null)
+                    compose.onNodeWithTag("bot.group.admin-note").performTouchInput { click() }
+                    compose.waitUntil(5_000) { keyboard() == null }
+                    search.assertIsNotFocused().assertTextContains("研究")
+                    search.performTouchInput { click() }
+                    compose.waitUntil(5_000) { keyboard() != null }
+                    compose.onNodeWithTag("bot.conversation.member.researcher").performScrollTo().assertIsDisplayed().performTouchInput { click() }
+                    compose.waitUntil(5_000) { keyboard() == null }
+                    search.assertIsNotFocused()
+                    compose.runOnIdle { check(holder.botSnapshot.conversation.memberIds == listOf("researcher")) }
+                    val message = compose.onNodeWithTag("bot.group.message")
+                    message.performScrollTo().performTouchInput { click() }
+                    compose.waitUntil(5_000) { keyboard() != null }
+                    message.assertIsFocused().performTextInput("保留群聊用途")
+                    message.performTouchInput { click() }
+                    message.assertIsFocused()
+                    check(keyboard() != null)
+                    capture("group-input-retains-focus")
+                    compose.onNodeWithText("首条消息（选填）").performTouchInput { click() }
+                    compose.waitUntil(5_000) { keyboard() == null }
+                    message.assertIsNotFocused().assertTextContains("保留群聊用途")
+                    message.performTouchInput { click() }
+                    compose.waitUntil(5_000) { keyboard() != null }
+                    compose.onNodeWithText("已选 1").performTouchInput { click() }
+                    compose.waitUntil(5_000) { keyboard() == null }
+                    message.assertIsNotFocused()
+                    compose.runOnIdle {
+                        check(holder.botSnapshot.conversation.message == "保留群聊用途")
+                        check(holder.botSnapshot.conversation.adminId == "researcher")
+                    }
+                    capture("group-outside-clears-focus")
                 }
                 return
             }

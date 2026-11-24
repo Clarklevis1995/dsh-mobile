@@ -391,6 +391,14 @@ class SharedBotStore {
         return result()
     }
 
+    /** 平台接纳导航后清理已完成的草稿，避免重建页面时重复打开。 */
+    fun consumeConversationNavigation(id: String): SharedBotTransition {
+        if (state.conversation.openedId == id) {
+            state = state.copy(conversation = BotConversationState(supported = state.conversation.supported))
+        }
+        return result()
+    }
+
     fun toggleConversationMember(id: String): SharedBotTransition {
         val draft = state.conversation
         if (draft.saving || draft.createdId != null || draft.uncertain || state.roster.none { it.id == id }) return result()

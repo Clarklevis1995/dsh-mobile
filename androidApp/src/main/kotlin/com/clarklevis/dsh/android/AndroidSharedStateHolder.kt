@@ -164,6 +164,7 @@ class AndroidSharedStateHolder(
     private val botFileSubmissions = mutableMapOf<String, List<String>>()
     private val selectedBotSessionId get() = botSnapshot.chats.firstOrNull { it.id == botSnapshot.selectedChatId }?.sessionId
 
+    internal fun consumeBotConversationNavigation(id: String) = applyBotTransition(botStore.consumeConversationNavigation(id))
     internal fun beginBotConversation() = applyBotTransition(botStore.beginConversation())
     internal fun searchConversationBots(query: String) = botStore.searchConversationBots(query)
     internal fun openConversationBot(id: String) = applyBotTransition(botStore.openConversationBot(id))

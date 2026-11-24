@@ -385,6 +385,49 @@ final class BotDesignUITests: XCTestCase {
     }
 
     @MainActor
+    func testNewGroupInputsDismissOnlyWhenTappingOutside() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            XCUIDevice.shared.orientation = .landscapeLeft
+        }
+        defer { XCUIDevice.shared.orientation = .portrait }
+        app.launchEnvironment["DSH_BOT_DESIGN_UI_TEST"] = "1"
+        app.launchEnvironment["DSH_BOT_DESIGN_STATE"] = "conversation-error"
+        app.launchArguments = ["-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN",
+            "-appearance.fontScale", ProcessInfo.processInfo.environment["DSH_CONVERSATION_LARGE"] == "1" ? "1.5" : "1.0"]
+        app.launch()
+        if app.alerts.firstMatch.waitForExistence(timeout: 1) { app.alerts.firstMatch.buttons.firstMatch.tap() }
+        let new = app.buttons["bot.conversation.new"]
+        XCTAssertTrue(new.waitForExistence(timeout: 10))
+        if !new.isHittable { app.swipeUp() }
+        new.tap(); app.buttons["新建群聊"].tap()
+        let search = app.textFields["bot.conversation.search"]
+        XCTAssertTrue(search.waitForExistence(timeout: 5))
+        search.tap(); search.typeText("研究")
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+        search.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.exists, "点击输入框内应保持焦点")
+        app.staticTexts["bot.group.admin-note"].tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 5))
+        XCTAssertEqual(search.value as? String, "研究")
+        app.buttons["bot.conversation.member.researcher"].tap()
+        let message = app.descendants(matching: .any).matching(identifier: "bot.group.message").firstMatch
+        for _ in 0..<5 { if message.isHittable { break }; app.swipeUp() }
+        message.tap(); message.typeText("保留群聊用途")
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+        message.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.exists)
+        capture(app, "新建群聊 · 输入框内保持焦点")
+        let caption = app.staticTexts["首条消息（选填）"].firstMatch
+        caption.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 5), "点击说明文字应失焦并收起键盘")
+        XCTAssertEqual(message.value as? String, "保留群聊用途")
+        XCTAssertTrue(app.buttons["bot.group.remove.researcher"].exists)
+        capture(app, "新建群聊 · 点击外部失焦保留草稿")
+    }
+
+    @MainActor
     func testNewGroupFailurePreservesDraft() {
         continueAfterFailure = false
         let app = XCUIApplication()

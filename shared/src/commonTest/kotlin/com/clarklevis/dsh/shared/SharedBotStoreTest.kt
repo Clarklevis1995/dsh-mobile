@@ -47,6 +47,30 @@ class SharedBotStoreTest {
     }
 
     @Test
+    fun acceptedConversationNavigationIsConsumedOnceAndNewGroupStartsClean() {
+        val store = conversationStore()
+        store.toggleConversationMember("a")
+        store.toggleConversationMember("b")
+        response(store, store.createConversationRoom(), "create-room",
+            """{"id":"new","members":["a","b"]}""")
+        store.consumeConversationNavigation("stale")
+        assertEquals("new", store.snapshot().conversation.openedId)
+        store.consumeConversationNavigation("new")
+        assertNull(store.snapshot().conversation.openedId)
+        assertTrue(store.snapshot().conversation.supported)
+        assertTrue(store.snapshot().chats.any { it.id == "new" })
+        store.beginConversation()
+        assertTrue(store.snapshot().conversation.memberIds.isEmpty())
+        assertNull(store.snapshot().conversation.createdId)
+        store.openConversationBot("a")
+        assertEquals("a", store.snapshot().conversation.openedId)
+        store.consumeConversationNavigation("a")
+        assertNull(store.snapshot().conversation.openedId)
+        store.openConversationBot("a")
+        assertEquals("a", store.snapshot().conversation.openedId)
+    }
+
+    @Test
     fun groupFirstMessageWaitsForRoomAndNeverCreatesTwiceOnFailure() {
         val store = conversationStore()
         store.toggleConversationMember("a"); store.toggleConversationMember("b")

@@ -1,5 +1,8 @@
 package com.clarklevis.dsh.android.ui
 
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -59,6 +62,8 @@ import com.clarklevis.dsh.shared.facade.BotCreationRules
 import com.clarklevis.dsh.shared.facade.BotRoleOption
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
+import androidx.lifecycle.Lifecycle
 
 private enum class BotManagementDestination { Roster, Create, Model, Appearance, Library }
 
@@ -95,7 +100,14 @@ internal fun BotManagementFlow(holder: AndroidSharedStateHolder, onDismiss: () -
     val state = snapshot.creation
     val colors = if (isSystemInDarkTheme()) managementDark else managementLight
     val canCreate = snapshot.canCreateBot
-    var page by rememberSaveable { mutableStateOf(if (startCreating) BotManagementDestination.Create else BotManagementDestination.Roster) }
+    val navigation = rememberNavController()
+    val startPage = if (startCreating) BotManagementDestination.Create else BotManagementDestination.Roster
+    val entry by navigation.currentBackStackEntryAsState()
+    val page = entry?.destination?.route?.let(BotManagementDestination::valueOf) ?: startPage
+    fun openPage(target: BotManagementDestination) {
+        if (navigation.previousBackStackEntry?.destination?.route == target.name) navigation.popBotPage()
+        else navigation.pushBotPage(target.name)
+    }
     var name by rememberSaveable { mutableStateOf("") }
     var local by rememberSaveable { mutableStateOf(false) }
     var agentId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -123,20 +135,15 @@ internal fun BotManagementFlow(holder: AndroidSharedStateHolder, onDismiss: () -
 
     fun back() {
         if (state.saving) return
-        page = when (page) {
-            BotManagementDestination.Roster -> { onDismiss(); return }
-            BotManagementDestination.Create -> if (startCreating) { onDismiss(); return } else BotManagementDestination.Roster
-            BotManagementDestination.Model, BotManagementDestination.Appearance -> BotManagementDestination.Create
-            BotManagementDestination.Library -> BotManagementDestination.Appearance
-        }
+        if (navigation.previousBackStackEntry == null) onDismiss() else navigation.popBotPage()
     }
     val pageScroll = BotManagementDestination.entries.map { rememberScrollState() }
     val pageScope = rememberCoroutineScope()
-    val scroll = pageScroll[page.ordinal]
-    BackHandler(onBack = ::back)
-    LaunchedEffect(state.createdId) {
-        if (state.createdId != null && page == BotManagementDestination.Create) {
-            if (startCreating) onDismiss() else page = BotManagementDestination.Roster
+    LaunchedEffect(state.createdId, entry) {
+        if (state.createdId != null && page == BotManagementDestination.Create && entry != null) {
+            // 快速创建成功也要等页面完成进入，不能被防重复点击的生命周期检查丢弃。
+            entry?.lifecycle?.currentStateFlow?.first { it == Lifecycle.State.RESUMED }
+            if (startCreating) onDismiss() else navigation.popBackStack(BotManagementDestination.Roster.name, false)
         }
     }
     LaunchedEffect(canCreate, page) {
@@ -151,355 +158,363 @@ internal fun BotManagementFlow(holder: AndroidSharedStateHolder, onDismiss: () -
         }
     }
 
-    when (page) {
-        BotManagementDestination.Roster -> {
-            val roster = snapshot.roster
-            ManagementPage(appText("我的 Bot"), colors, ::back, scroll, isRoster = true, action = {
-                ManagementPill(appText("新建 Bot"), colors, R.drawable.ic_add, enabled = canCreate,
-                    modifier = Modifier.testTag("bot.new")) {
-                    name = ""
-                    local = false
-                    agentId = null
-                    cloudOverride = null
-                    localOverride = null
-                    effort = null
-                    look = null
-                    photo = null
-                    customLook = false
-                    holder.openBotCreation()
-                    page = BotManagementDestination.Create
-                    pageScope.launch { pageScroll[BotManagementDestination.Create.ordinal].scrollTo(0) }
-                }
-            }) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    ManagementCaption(appText("团队成员"), colors, Modifier.weight(1f))
-                    ManagementCaption(appText("%1\$s 个 Bot", roster.size), colors)
-                }
-                if (!canCreate) {
-                    val status = when {
-                        !snapshot.connected -> appText("连接主机后可以创建 Bot")
-                        !snapshot.writable -> appText("当前主机为只读")
-                        else -> appText("请更新主机上的移动网关和 DS Bot 后再创建 Bot")
+    BotNavigationHost(navigation, startPage.name, Modifier.fillMaxSize()) {
+        BotManagementDestination.entries.forEach { destination ->
+            composable(destination.name) {
+                val scroll = pageScroll[destination.ordinal]
+                when (destination) {
+                    BotManagementDestination.Roster -> {
+                        val roster = snapshot.roster
+                        ManagementPage(appText("我的 Bot"), colors, ::back, scroll, isRoster = true, action = {
+                            ManagementPill(appText("新建 Bot"), colors, R.drawable.ic_add, enabled = canCreate,
+                                modifier = Modifier.testTag("bot.new")) {
+                                name = ""
+                                local = false
+                                agentId = null
+                                cloudOverride = null
+                                localOverride = null
+                                effort = null
+                                look = null
+                                photo = null
+                                customLook = false
+                                holder.openBotCreation()
+                                openPage(BotManagementDestination.Create)
+                                pageScope.launch { pageScroll[BotManagementDestination.Create.ordinal].scrollTo(0) }
+                            }
+                        }) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                ManagementCaption(appText("团队成员"), colors, Modifier.weight(1f))
+                                ManagementCaption(appText("%1\$s 个 Bot", roster.size), colors)
+                            }
+                            if (!canCreate) {
+                                val status = when {
+                                    !snapshot.connected -> appText("连接主机后可以创建 Bot")
+                                    !snapshot.writable -> appText("当前主机为只读")
+                                    else -> appText("请更新主机上的移动网关和 DS Bot 后再创建 Bot")
+                                }
+                                ManagementCaption(status, colors)
+                            }
+                            if (roster.isEmpty() && snapshot.loading) {
+                                ManagementProgress(colors)
+                            } else ManagementSection(colors) {
+                                if (roster.isEmpty()) Text(appText("还没有 Bot"), Modifier.fillMaxWidth().padding(16.dp),
+                                    color = colors.text, style = SettingsTypography.item, textAlign = TextAlign.Center)
+                                roster.forEachIndexed { index, bot ->
+                                    if (index > 0) ManagementDivider(colors.line.copy(alpha = 0.45f))
+                                    Row(Modifier.fillMaxWidth().heightIn(min = 72.dp).testTag("bot.roster." + bot.id)
+                                        .clickable(role = Role.Button) { showRole(bot.id) }.padding(horizontal = 16.dp, vertical = 12.dp),
+                                        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                        val main = bot.id == snapshot.mainBotId
+                                        BotAvatar(bot, 44.dp, main = main)
+                                        Column(Modifier.weight(1f).padding(end = 8.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                                Text(bot.name, Modifier.weight(1f, fill = false), style = rosterTextStyle,
+                                                    fontSize = 17.sp, lineHeight = 20.sp,
+                                                    fontWeight = FontWeight.SemiBold, color = colors.text)
+                                                if (main) {
+                                                    val labelHeight = with(LocalDensity.current) { 12.sp.toDp() } + 6.dp
+                                                    Box(
+                                                        Modifier.testTag("bot.roster.main-badge").height(labelHeight)
+                                                            .background(colors.soft, RoundedCornerShape(6.dp))
+                                                            .padding(horizontal = 7.dp),
+                                                        contentAlignment = Alignment.Center,
+                                                    ) {
+                                                        Text(appText("主 Bot"), style = rosterTextStyle, fontSize = 10.sp,
+                                                            lineHeight = 12.sp, color = colors.accent, fontWeight = FontWeight.Medium,
+                                                            maxLines = 1, softWrap = false)
+                                                    }
+                                                }
+                                            }
+                                            if (bot.role.isNotEmpty()) {
+                                                Text(bot.role, style = rosterTextStyle, fontSize = 12.sp, lineHeight = 15.sp, color = colors.secondary)
+                                            }
+                                        }
+                                        ManagementIcon(R.drawable.ic_chevron_right, colors.text, 14.dp)
+                                    }
+                                }
+                            }
+                        }
                     }
-                    ManagementCaption(status, colors)
-                }
-                if (roster.isEmpty() && snapshot.loading) {
-                    ManagementProgress(colors)
-                } else ManagementSection(colors) {
-                    if (roster.isEmpty()) Text(appText("还没有 Bot"), Modifier.fillMaxWidth().padding(16.dp),
-                        color = colors.text, style = SettingsTypography.item, textAlign = TextAlign.Center)
-                    roster.forEachIndexed { index, bot ->
-                        if (index > 0) ManagementDivider(colors.line.copy(alpha = 0.45f))
-                        Row(Modifier.fillMaxWidth().heightIn(min = 72.dp).testTag("bot.roster." + bot.id)
-                            .clickable(role = Role.Button) { showRole(bot.id) }.padding(horizontal = 16.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            val main = bot.id == snapshot.mainBotId
-                            BotAvatar(bot, 44.dp, main = main)
-                            Column(Modifier.weight(1f).padding(end = 8.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Text(bot.name, Modifier.weight(1f, fill = false), style = rosterTextStyle,
-                                        fontSize = 17.sp, lineHeight = 20.sp,
-                                        fontWeight = FontWeight.SemiBold, color = colors.text)
-                                    if (main) {
-                                        val labelHeight = with(LocalDensity.current) { 12.sp.toDp() } + 6.dp
-                                        Box(
-                                            Modifier.testTag("bot.roster.main-badge").height(labelHeight)
-                                                .background(colors.soft, RoundedCornerShape(6.dp))
-                                                .padding(horizontal = 7.dp),
-                                            contentAlignment = Alignment.Center,
-                                        ) {
-                                            Text(appText("主 Bot"), style = rosterTextStyle, fontSize = 10.sp,
-                                                lineHeight = 12.sp, color = colors.accent, fontWeight = FontWeight.Medium,
-                                                maxLines = 1, softWrap = false)
+
+                    BotManagementDestination.Create -> ManagementPage(appText("新建 Bot"), colors, ::back, scroll, backEnabled = !state.saving,
+                        footer = {
+                            ManagementAction(appText("创建 Bot"), creationReady, state.saving, Modifier.testTag("bot.create.submit")) {
+                                val selected = look ?: return@ManagementAction
+                                holder.createBot(finalName, selected.shape, selected.color, photo, if (local) localModel else cloudModel,
+                                    if (local) null else effort, agentAppearance = local && !customLook)
+                            }
+                        }) {
+                        Row(Modifier.fillMaxWidth().managementSurface(colors).testTag("bot.create.appearance")
+                            .clickable(enabled = canCreate && !state.saving && (look != null || state.appearanceFailed), role = Role.Button) {
+                                if (state.appearanceFailed) holder.openBotCreation()
+                                else {
+                                    appearanceDraft = look
+                                    photoDraft = photo
+                                    openPage(BotManagementDestination.Appearance)
+                                }
+                            }.padding(16.dp).heightIn(min = 52.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            ManagementFace(colors, photo ?: agent?.image?.takeIf { local && !customLook }
+                                ?: look?.let { appearance?.image(it.shape, it.color) }, 52.dp)
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(appText("形象"), color = colors.text, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                                val hint = when {
+                                    local && agent != null && !customLook -> appText("使用 %1\$s 形象", agent.title)
+                                    customLook -> appText("使用自定义形象")
+                                    else -> appText("使用自动分配的形象")
+                                }
+                                Text(hint, color = colors.secondary, fontSize = 12.sp)
+                            }
+                            if (state.loadingAppearance) CircularProgressIndicator(Modifier.size(16.dp), color = colors.accent, strokeWidth = 2.dp)
+                            else {
+                                Text(if (state.appearanceFailed) appText("重试") else appText("编辑"), fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold, color = colors.accent)
+                                ManagementIcon(R.drawable.ic_chevron_right, colors.text, 14.dp)
+                            }
+                        }
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            ManagementCaption(appText("名字"), colors)
+                            val shape = RoundedCornerShape(16.dp)
+                            BasicTextField(
+                                value = name, onValueChange = { name = it }, enabled = !state.saving, singleLine = true,
+                                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).clip(shape).background(colors.card)
+                                    .border(1.dp, colors.line, shape).testTag("bot.create.name")
+                                    .semantics { contentDescription = appText("名字") },
+                                cursorBrush = SolidColor(colors.accent), textStyle = TextStyle(color = colors.text, fontSize = 16.sp),
+                                decorationBox = { input ->
+                                    Box(Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(horizontal = 16.dp, vertical = 10.dp),
+                                        contentAlignment = Alignment.CenterStart) {
+                                        if (name.isEmpty()) Text(suggestedName, color = colors.secondary, fontSize = 16.sp)
+                                        input()
+                                    }
+                                }
+                            )
+                            if (nameError == null) ManagementCaption(appText("留空会使用自动生成的名字。"), colors)
+                            else Text(when (nameError) {
+                                "duplicate" -> appText("已经有一个同名 Bot。")
+                                "length" -> appText("名字最多 40 个字符。")
+                                "reserved" -> appText("这个名字在群聊中有保留用途。")
+                                else -> appText("名字不能包含 @、反引号或控制字符。")
+                            }, fontSize = 13.sp, color = managementError())
+                        }
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            ManagementCaption(appText("运行方式"), colors)
+                            ManagementMode(local, !state.saving, colors) { selected ->
+                                local = selected
+                                if (selected) holder.loadBotCreationAgents()
+                            }
+                        }
+                        if (local) Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            ManagementCaption(appText("本地 Agent"), colors)
+                            ManagementSection(colors) {
+                                when {
+                                    state.loadingAgents && state.agents.isEmpty() -> ManagementProgress(colors)
+                                    state.agentsFailed || state.agents.isEmpty() -> ManagementRow(colors,
+                                        if (state.agentsFailed) appText("无法读取本地 Agent") else appText("未发现本地 Agent"),
+                                        appText("重试"), enabled = canCreate && !state.saving) { holder.loadBotCreationAgents() }
+                                    else -> state.agents.forEachIndexed { index, item ->
+                                        if (index > 0) ManagementDivider(colors.line)
+                                        val status = when {
+                                            item.signedIn == true -> appText("已登录")
+                                            item.available -> appText("可用")
+                                            else -> appText("未登录")
+                                        }
+                                        ManagementRow(colors, item.title, status,
+                                            icon = R.drawable.ic_command_status, marked = item.id == agentId, chevron = false,
+                                            enabled = item.available && !state.saving, modifier = Modifier.testTag("bot.create.agent." + item.id)) {
+                                            agentId = item.id
+                                            localOverride = null
+                                            holder.loadBotCreationAgentModels(item.id)
                                         }
                                     }
                                 }
-                                if (bot.role.isNotEmpty()) {
-                                    Text(bot.role, style = rosterTextStyle, fontSize = 12.sp, lineHeight = 15.sp, color = colors.secondary)
+                            }
+                            if (agent == null) ManagementCaption(appText("请选择主机上可用的 Agent。"), colors)
+                        }
+                        if (!local || agent != null) Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            ManagementCaption(appText("模型"), colors)
+                            ManagementSection(colors) {
+                                ManagementRow(colors, if (local) appText("模型") else appText("所选模型"), modelTitle,
+                                    enabled = !state.saving, modifier = Modifier.testTag("bot.create.model")) {
+                                    if (!local) cloudModel?.let(holder::loadBotRoleEfforts)
+                                    openPage(BotManagementDestination.Model)
                                 }
                             }
-                            ManagementIcon(R.drawable.ic_chevron_right, colors.text, 14.dp)
+                            ManagementCaption(if (local && agent != null) appText("沿用 %1\$s 的默认模型。", agent.title)
+                                else appText("沿用主机预选模型，可在 Bot 详情中修改。"), colors)
                         }
+                        state.error?.let { code ->
+                            Text(if (code == "uncertain") appText("暂时无法确认创建结果，请返回列表查看。")
+                                else appText("创建 Bot 失败，请检查主机连接和设置后重试。"), fontSize = 13.sp, color = managementError())
+                        }
+                        if (!canCreate) ManagementCaption(appText("连接主机后可以创建 Bot"), colors)
                     }
-                }
-            }
-        }
 
-        BotManagementDestination.Create -> ManagementPage(appText("新建 Bot"), colors, ::back, scroll, backEnabled = !state.saving,
-            footer = {
-                ManagementAction(appText("创建 Bot"), creationReady, state.saving, Modifier.testTag("bot.create.submit")) {
-                    val selected = look ?: return@ManagementAction
-                    holder.createBot(finalName, selected.shape, selected.color, photo, if (local) localModel else cloudModel,
-                        if (local) null else effort, agentAppearance = local && !customLook)
-                }
-            }) {
-            Row(Modifier.fillMaxWidth().managementSurface(colors).testTag("bot.create.appearance")
-                .clickable(enabled = canCreate && !state.saving && (look != null || state.appearanceFailed), role = Role.Button) {
-                    if (state.appearanceFailed) holder.openBotCreation()
-                    else {
-                        appearanceDraft = look
-                        photoDraft = photo
-                        page = BotManagementDestination.Appearance
-                    }
-                }.padding(16.dp).heightIn(min = 52.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                ManagementFace(colors, photo ?: agent?.image?.takeIf { local && !customLook }
-                    ?: look?.let { appearance?.image(it.shape, it.color) }, 52.dp)
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(appText("形象"), color = colors.text, fontSize = 15.sp, fontWeight = FontWeight.Medium)
-                    val hint = when {
-                        local && agent != null && !customLook -> appText("使用 %1\$s 形象", agent.title)
-                        customLook -> appText("使用自定义形象")
-                        else -> appText("使用自动分配的形象")
-                    }
-                    Text(hint, color = colors.secondary, fontSize = 12.sp)
-                }
-                if (state.loadingAppearance) CircularProgressIndicator(Modifier.size(16.dp), color = colors.accent, strokeWidth = 2.dp)
-                else {
-                    Text(if (state.appearanceFailed) appText("重试") else appText("编辑"), fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold, color = colors.accent)
-                    ManagementIcon(R.drawable.ic_chevron_right, colors.text, 14.dp)
-                }
-            }
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                ManagementCaption(appText("名字"), colors)
-                val shape = RoundedCornerShape(16.dp)
-                BasicTextField(
-                    value = name, onValueChange = { name = it }, enabled = !state.saving, singleLine = true,
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).clip(shape).background(colors.card)
-                        .border(1.dp, colors.line, shape).testTag("bot.create.name")
-                        .semantics { contentDescription = appText("名字") },
-                    cursorBrush = SolidColor(colors.accent), textStyle = TextStyle(color = colors.text, fontSize = 16.sp),
-                    decorationBox = { input ->
-                        Box(Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(horizontal = 16.dp, vertical = 10.dp),
-                            contentAlignment = Alignment.CenterStart) {
-                            if (name.isEmpty()) Text(suggestedName, color = colors.secondary, fontSize = 16.sp)
-                            input()
-                        }
-                    }
-                )
-                if (nameError == null) ManagementCaption(appText("留空会使用自动生成的名字。"), colors)
-                else Text(when (nameError) {
-                    "duplicate" -> appText("已经有一个同名 Bot。")
-                    "length" -> appText("名字最多 40 个字符。")
-                    "reserved" -> appText("这个名字在群聊中有保留用途。")
-                    else -> appText("名字不能包含 @、反引号或控制字符。")
-                }, fontSize = 13.sp, color = managementError())
-            }
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                ManagementCaption(appText("运行方式"), colors)
-                ManagementMode(local, !state.saving, colors) { selected ->
-                    local = selected
-                    if (selected) holder.loadBotCreationAgents()
-                }
-            }
-            if (local) Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                ManagementCaption(appText("本地 Agent"), colors)
-                ManagementSection(colors) {
-                    when {
-                        state.loadingAgents && state.agents.isEmpty() -> ManagementProgress(colors)
-                        state.agentsFailed || state.agents.isEmpty() -> ManagementRow(colors,
-                            if (state.agentsFailed) appText("无法读取本地 Agent") else appText("未发现本地 Agent"),
-                            appText("重试"), enabled = canCreate && !state.saving) { holder.loadBotCreationAgents() }
-                        else -> state.agents.forEachIndexed { index, item ->
-                            if (index > 0) ManagementDivider(colors.line)
-                            val status = when {
-                                item.signedIn == true -> appText("已登录")
-                                item.available -> appText("可用")
-                                else -> appText("未登录")
-                            }
-                            ManagementRow(colors, item.title, status,
-                                icon = R.drawable.ic_command_status, marked = item.id == agentId, chevron = false,
-                                enabled = item.available && !state.saving, modifier = Modifier.testTag("bot.create.agent." + item.id)) {
-                                agentId = item.id
-                                localOverride = null
-                                holder.loadBotCreationAgentModels(item.id)
-                            }
-                        }
-                    }
-                }
-                if (agent == null) ManagementCaption(appText("请选择主机上可用的 Agent。"), colors)
-            }
-            if (!local || agent != null) Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                ManagementCaption(appText("模型"), colors)
-                ManagementSection(colors) {
-                    ManagementRow(colors, if (local) appText("模型") else appText("所选模型"), modelTitle,
-                        enabled = !state.saving, modifier = Modifier.testTag("bot.create.model")) {
-                        if (!local) cloudModel?.let(holder::loadBotRoleEfforts)
-                        page = BotManagementDestination.Model
-                    }
-                }
-                ManagementCaption(if (local && agent != null) appText("沿用 %1\$s 的默认模型。", agent.title)
-                    else appText("沿用主机预选模型，可在 Bot 详情中修改。"), colors)
-            }
-            state.error?.let { code ->
-                Text(if (code == "uncertain") appText("暂时无法确认创建结果，请返回列表查看。")
-                    else appText("创建 Bot 失败，请检查主机连接和设置后重试。"), fontSize = 13.sp, color = managementError())
-            }
-            if (!canCreate) ManagementCaption(appText("连接主机后可以创建 Bot"), colors)
-        }
-
-        BotManagementDestination.Model -> ManagementPage(appText("选择模型"), colors, ::back, scroll) {
-            ManagementCaption(appText("可用模型"), colors)
-            ManagementSection(colors) {
-                if (local) {
-                    ManagementRow(colors, appText("CLI 默认"),
-                        if (localModel == localDefault) appText("已选") else appText("选择")) {
-                        localOverride = null
-                        page = BotManagementDestination.Create
-                    }
-                }
-                options.forEachIndexed { index, option ->
-                    if (index > 0 || local) ManagementDivider(colors.line)
-                    val selected = option.id == (if (local) localModel else cloudModel)
-                    ManagementRow(colors, option.title, if (selected) appText("已选") else appText("选择")) {
-                        if (local) {
-                            localOverride = option.id
-                            page = BotManagementDestination.Create
-                        } else {
-                            if (!selected) effort = null
-                            cloudOverride = option.id
-                            holder.loadBotRoleEfforts(option.id)
-                        }
-                    }
-                }
-                if (local && state.loadingAgentModels) ManagementProgress(colors)
-                if (!local && options.isEmpty()) ManagementCaption(appText("主机暂无可选模型"), colors, Modifier.padding(16.dp))
-            }
-            if (!local) {
-                ManagementCaption(appText("思考强度"), colors)
-                val efforts = if (snapshot.effortModel == cloudModel) snapshot.efforts else emptyList()
-                ManagementEffortPicker(colors, efforts, effort) { chosen ->
-                    effort = chosen
-                    page = BotManagementDestination.Create
-                }
-                ManagementCaption(appText("主机会提供模型和它所支持的思考强度。"), colors)
-            }
-        }
-
-        BotManagementDestination.Appearance -> {
-            val current = appearanceDraft
-            var busy by remember { mutableStateOf(false) }
-            var photoError by remember { mutableStateOf(false) }
-            val pickPhoto = rememberManagementPhotoPicker(
-                onBusy = { busy = it; if (it) photoError = false },
-                onError = { photoError = true }
-            ) { image, _ -> photoDraft = image }
-            ManagementPage(appText("编辑形象"), colors, ::back, scroll, footer = {
-                ManagementAction(appText("完成"), !busy && current != null, false, Modifier.testTag("bot.appearance.done")) {
-                    look = current
-                    photo = photoDraft
-                    customLook = true
-                    page = BotManagementDestination.Create
-                }
-            }) {
-                Box(Modifier.fillMaxWidth().heightIn(min = 84.dp).managementSurface(colors),
-                    contentAlignment = Alignment.Center) {
-                    ManagementFace(colors, photoDraft ?: current?.let { appearance?.image(it.shape, it.color) }, 72.dp, tile = false)
-                }
-                if (appearance != null && current != null) {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        ManagementCaption(appText("形状"), colors)
-                        appearance.shapes.chunked(5).forEach { row ->
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                row.forEach { shape ->
-                                    val selected = current.shape == shape.id && photoDraft == null
-                                    val tile = RoundedCornerShape(14.dp)
-                                    Box(Modifier.weight(1f).height(52.dp).clip(tile).background(if (selected) colors.soft else colors.card)
-                                        .border(if (selected) 1.5.dp else 0.dp, if (selected) colors.accent else Color.Transparent, tile)
-                                        .semantics { contentDescription = shape.id }
-                                        .selectable(selected, role = Role.Button) {
-                                            appearanceDraft = current.copy(shape = shape.id)
-                                            photoDraft = null
-                                        }, contentAlignment = Alignment.Center) {
-                                        ManagementFace(colors, shape.images[current.color], 40.dp, tile = false)
-                                    }
+                    BotManagementDestination.Model -> ManagementPage(appText("选择模型"), colors, ::back, scroll) {
+                        ManagementCaption(appText("可用模型"), colors)
+                        ManagementSection(colors) {
+                            if (local) {
+                                ManagementRow(colors, appText("CLI 默认"),
+                                    if (localModel == localDefault) appText("已选") else appText("选择")) {
+                                    localOverride = null
+                                    openPage(BotManagementDestination.Create)
                                 }
-                                repeat(5 - row.size) { Spacer(Modifier.weight(1f)) }
                             }
-                        }
-                    }
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        ManagementCaption(appText("颜色"), colors)
-                        appearance.colors.chunked(6).forEach { row ->
-                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                row.forEach { color ->
-                                    val selected = current.color == color.id && photoDraft == null
-                                    val palette = color.stops.map { Color(android.graphics.Color.parseColor(it)) }
-                                    Box(Modifier.size(37.dp, 38.dp).semantics { contentDescription = color.id }
-                                        .selectable(selected, role = Role.Button) {
-                                            appearanceDraft = current.copy(color = color.id)
-                                            photoDraft = null
-                                        }, contentAlignment = Alignment.Center) {
-                                        Box(Modifier.size(31.dp).clip(CircleShape)
-                                            .then(if (palette.size == 1) Modifier.background(palette.single())
-                                                else Modifier.background(Brush.linearGradient(palette)))
-                                            .border(if (selected) 2.dp else .75.dp, if (selected) colors.accent else Color.White, CircleShape))
+                            options.forEachIndexed { index, option ->
+                                if (index > 0 || local) ManagementDivider(colors.line)
+                                val selected = option.id == (if (local) localModel else cloudModel)
+                                ManagementRow(colors, option.title, if (selected) appText("已选") else appText("选择")) {
+                                    if (local) {
+                                        localOverride = option.id
+                                        openPage(BotManagementDestination.Create)
+                                    } else {
+                                        if (!selected) effort = null
+                                        cloudOverride = option.id
+                                        holder.loadBotRoleEfforts(option.id)
                                     }
                                 }
                             }
+                            if (local && state.loadingAgentModels) ManagementProgress(colors)
+                            if (!local && options.isEmpty()) ManagementCaption(appText("主机暂无可选模型"), colors, Modifier.padding(16.dp))
+                        }
+                        if (!local) {
+                            ManagementCaption(appText("思考强度"), colors)
+                            val efforts = if (snapshot.effortModel == cloudModel) snapshot.efforts else emptyList()
+                            ManagementEffortPicker(colors, efforts, effort) { chosen ->
+                                effort = chosen
+                                openPage(BotManagementDestination.Create)
+                            }
+                            ManagementCaption(appText("主机会提供模型和它所支持的思考强度。"), colors)
                         }
                     }
-                }
-                @OptIn(ExperimentalLayoutApi::class)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ManagementPill(appText("随机"), colors, R.drawable.ic_shuffle) {
-                        appearance?.randomLook(current)?.let { appearanceDraft = it; photoDraft = null }
-                    }
-                    ManagementPill(appText("上传照片"), colors, R.drawable.ic_photo_outline, enabled = !busy, onClick = pickPhoto)
-                    ManagementPill(appText("头像库"), colors, R.drawable.ic_session_archive) {
-                        holder.loadBotCreationPhotos(true)
-                        page = BotManagementDestination.Library
-                    }
-                }
-                if (photoError) ManagementCaption(appText("无法读取或处理所选照片。"), colors)
-            }
-        }
 
-        BotManagementDestination.Library -> {
-            var busy by remember { mutableStateOf(false) }
-            var photoError by remember { mutableStateOf(false) }
-            val pickPhoto = rememberManagementPhotoPicker(
-                onBusy = { busy = it; if (it) photoError = false },
-                onError = { photoError = true },
-                onPhoto = holder::importBotCreationPhoto
-            )
-            ManagementPage(appText("头像库"), colors, ::back, scroll, action = {
-                ManagementPill(appText("导入照片"), colors, R.drawable.ic_add, enabled = !busy && !state.loadingPhotos && canCreate, onClick = pickPhoto)
-            }) {
-                if (photoError) ManagementCaption(appText("无法读取或处理所选照片。"), colors)
-                if (state.photosFailed) ManagementSection(colors) {
-                    ManagementRow(colors, appText("头像库操作失败"), appText("重试")) { holder.loadBotCreationPhotos(true) }
-                }
-                if (state.photos.isEmpty() && !state.loadingPhotos && !state.photosFailed) ManagementSection(colors) {
-                    ManagementCaption(appText("头像库还没有照片。"), colors, Modifier.padding(16.dp))
-                }
-                BoxWithConstraints(Modifier.fillMaxWidth()) {
-                    val columns = ((maxWidth + 10.dp) / 82.dp).toInt().coerceAtLeast(1)
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        state.photos.chunked(columns).forEach { row ->
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                row.forEach { entry ->
-                                    Box(Modifier.weight(1f).heightIn(min = 80.dp).managementSurface(colors)
-                                        .semantics { contentDescription = entry.name }.clickable(role = Role.Button) {
-                                            photoDraft = entry.image
-                                            page = BotManagementDestination.Appearance
-                                        }.padding(vertical = 6.dp), contentAlignment = Alignment.Center) {
-                                        ManagementFace(colors, entry.image, 68.dp)
+                    BotManagementDestination.Appearance -> {
+                        val current = appearanceDraft
+                        var busy by remember { mutableStateOf(false) }
+                        var photoError by remember { mutableStateOf(false) }
+                        val pickPhoto = rememberManagementPhotoPicker(
+                            onBusy = { busy = it; if (it) photoError = false },
+                            onError = { photoError = true }
+                        ) { image, _ -> photoDraft = image }
+                        ManagementPage(appText("编辑形象"), colors, ::back, scroll, footer = {
+                            ManagementAction(appText("完成"), !busy && current != null, false, Modifier.testTag("bot.appearance.done")) {
+                                look = current
+                                photo = photoDraft
+                                customLook = true
+                                openPage(BotManagementDestination.Create)
+                            }
+                        }) {
+                            Box(Modifier.fillMaxWidth().heightIn(min = 84.dp).managementSurface(colors),
+                                contentAlignment = Alignment.Center) {
+                                ManagementFace(colors, photoDraft ?: current?.let { appearance?.image(it.shape, it.color) }, 72.dp, tile = false)
+                            }
+                            if (appearance != null && current != null) {
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    ManagementCaption(appText("形状"), colors)
+                                    appearance.shapes.chunked(5).forEach { row ->
+                                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            row.forEach { shape ->
+                                                val selected = current.shape == shape.id && photoDraft == null
+                                                val tile = RoundedCornerShape(14.dp)
+                                                Box(Modifier.weight(1f).height(52.dp).clip(tile).background(if (selected) colors.soft else colors.card)
+                                                    .border(if (selected) 1.5.dp else 0.dp, if (selected) colors.accent else Color.Transparent, tile)
+                                                    .semantics { contentDescription = shape.id }
+                                                    .selectable(selected, role = Role.Button) {
+                                                        appearanceDraft = current.copy(shape = shape.id)
+                                                        photoDraft = null
+                                                    }, contentAlignment = Alignment.Center) {
+                                                    ManagementFace(colors, shape.images[current.color], 40.dp, tile = false)
+                                                }
+                                            }
+                                            repeat(5 - row.size) { Spacer(Modifier.weight(1f)) }
+                                        }
                                     }
                                 }
-                                repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
+                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    ManagementCaption(appText("颜色"), colors)
+                                    appearance.colors.chunked(6).forEach { row ->
+                                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                            row.forEach { color ->
+                                                val selected = current.color == color.id && photoDraft == null
+                                                val palette = color.stops.map { Color(android.graphics.Color.parseColor(it)) }
+                                                Box(Modifier.size(37.dp, 38.dp).semantics { contentDescription = color.id }
+                                                    .selectable(selected, role = Role.Button) {
+                                                        appearanceDraft = current.copy(color = color.id)
+                                                        photoDraft = null
+                                                    }, contentAlignment = Alignment.Center) {
+                                                    Box(Modifier.size(31.dp).clip(CircleShape)
+                                                        .then(if (palette.size == 1) Modifier.background(palette.single())
+                                                            else Modifier.background(Brush.linearGradient(palette)))
+                                                        .border(if (selected) 2.dp else .75.dp, if (selected) colors.accent else Color.White, CircleShape))
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            @OptIn(ExperimentalLayoutApi::class)
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                ManagementPill(appText("随机"), colors, R.drawable.ic_shuffle) {
+                                    appearance?.randomLook(current)?.let { appearanceDraft = it; photoDraft = null }
+                                }
+                                ManagementPill(appText("上传照片"), colors, R.drawable.ic_photo_outline, enabled = !busy, onClick = pickPhoto)
+                                ManagementPill(appText("头像库"), colors, R.drawable.ic_session_archive) {
+                                    holder.loadBotCreationPhotos(true)
+                                    openPage(BotManagementDestination.Library)
+                                }
+                            }
+                            if (photoError) ManagementCaption(appText("无法读取或处理所选照片。"), colors)
+                        }
+                    }
+
+                    BotManagementDestination.Library -> {
+                        var busy by remember { mutableStateOf(false) }
+                        var photoError by remember { mutableStateOf(false) }
+                        val pickPhoto = rememberManagementPhotoPicker(
+                            onBusy = { busy = it; if (it) photoError = false },
+                            onError = { photoError = true },
+                            onPhoto = holder::importBotCreationPhoto
+                        )
+                        ManagementPage(appText("头像库"), colors, ::back, scroll, action = {
+                            ManagementPill(appText("导入照片"), colors, R.drawable.ic_add, enabled = !busy && !state.loadingPhotos && canCreate, onClick = pickPhoto)
+                        }) {
+                            if (photoError) ManagementCaption(appText("无法读取或处理所选照片。"), colors)
+                            if (state.photosFailed) ManagementSection(colors) {
+                                ManagementRow(colors, appText("头像库操作失败"), appText("重试")) { holder.loadBotCreationPhotos(true) }
+                            }
+                            if (state.photos.isEmpty() && !state.loadingPhotos && !state.photosFailed) ManagementSection(colors) {
+                                ManagementCaption(appText("头像库还没有照片。"), colors, Modifier.padding(16.dp))
+                            }
+                            BoxWithConstraints(Modifier.fillMaxWidth()) {
+                                val columns = ((maxWidth + 10.dp) / 82.dp).toInt().coerceAtLeast(1)
+                                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    state.photos.chunked(columns).forEach { row ->
+                                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                            row.forEach { entry ->
+                                                Box(Modifier.weight(1f).heightIn(min = 80.dp).managementSurface(colors)
+                                                    .semantics { contentDescription = entry.name }.clickable(role = Role.Button) {
+                                                        photoDraft = entry.image
+                                                        openPage(BotManagementDestination.Appearance)
+                                                    }.padding(vertical = 6.dp), contentAlignment = Alignment.Center) {
+                                                    ManagementFace(colors, entry.image, 68.dp)
+                                                }
+                                            }
+                                            repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
+                                        }
+                                    }
+                                }
+                            }
+                            if (state.loadingPhotos || busy) ManagementProgress(colors)
+                            else if (state.hasMorePhotos) ManagementSection(colors) {
+                                ManagementRow(colors, appText("加载更多"), chevron = false) { holder.loadBotCreationPhotos(false) }
                             }
                         }
                     }
-                }
-                if (state.loadingPhotos || busy) ManagementProgress(colors)
-                else if (state.hasMorePhotos) ManagementSection(colors) {
-                    ManagementRow(colors, appText("加载更多"), chevron = false) { holder.loadBotCreationPhotos(false) }
                 }
             }
         }
     }
+    BackHandler(onBack = ::back)
 }
 
 @Composable
@@ -715,101 +730,100 @@ internal fun BotConversationPicker(holder: AndroidSharedStateHolder, group: Bool
     val canWrite = snapshot.connected && snapshot.writable && draft.supported
     val locked = draft.saving || draft.createdId != null || draft.uncertain
     BackHandler { if (!draft.saving) dismiss() }
-    ManagementPage(if (group) appText("新建群聊") else appText("查找 Bot"), colors,
-        dismiss, rememberScrollState(), backEnabled = !draft.saving, contentWidth = 608.dp, contentInset = 24.dp, nativeToolbar = true, action = {
-            if (group) Box(Modifier.heightIn(min = 44.dp).dshWorkspaceGlass(CircleShape, DshGlassStyle.SUBTLE)
-                .padding(horizontal = 14.dp, vertical = 12.dp)) {
-                Text(appText("已选 %1\$s", draft.memberIds.size), color = colors.secondary, fontSize = 14.sp)
-            }
-        }, footer = {
-            if (group) Column(Modifier.padding(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                if (draft.createdId == null) Text(appText("不填写首条消息时，管理员会先询问群聊用途。"),
-                    color = colors.secondary, fontSize = 12.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
-                ManagementAction(if (draft.createdId == null) appText("创建群聊 · %1\$s 位 Bot", draft.memberIds.size)
-                    else appText("重试发送首条消息"), canWrite && draft.memberIds.size >= 2 && !draft.uncertain,
-                    draft.saving, Modifier.testTag("bot.group.create")) {
-                    if (draft.createdId != null) holder.retryConversationMessage() else holder.createConversationRoom()
+    KeyboardDismissHost(Modifier.fillMaxSize()) {
+        ManagementPage(if (group) appText("新建群聊") else appText("查找 Bot"), colors,
+            dismiss, rememberScrollState(), backEnabled = !draft.saving, contentWidth = 608.dp, contentInset = 24.dp, nativeToolbar = true, action = {
+                if (group) Text(appText("已选 %1\$s", draft.memberIds.size), color = colors.secondary, fontSize = 14.sp)
+            }, footer = {
+                if (group) Column(Modifier.padding(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    if (draft.createdId == null) Text(appText("不填写首条消息时，管理员会先询问群聊用途。"),
+                        color = colors.secondary, fontSize = 12.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                    ManagementAction(if (draft.createdId == null) appText("创建群聊 · %1\$s 位 Bot", draft.memberIds.size)
+                        else appText("重试发送首条消息"), canWrite && draft.memberIds.size >= 2 && !draft.uncertain,
+                        draft.saving, Modifier.testTag("bot.group.create")) {
+                        if (draft.createdId != null) holder.retryConversationMessage() else holder.createConversationRoom()
+                    }
+                    if (draft.createdId != null) ManagementPill(appText("进入群聊"), colors, enabled = !draft.saving,
+                        modifier = Modifier.testTag("bot.group.enter"), onClick = holder::enterCreatedConversation)
                 }
-                if (draft.createdId != null) ManagementPill(appText("进入群聊"), colors, enabled = !draft.saving,
-                    modifier = Modifier.testTag("bot.group.enter"), onClick = holder::enterCreatedConversation)
-            }
-        }) {
-        if (group) {
-            Text(appText("选择群聊成员"), fontSize = 28.sp, fontWeight = FontWeight.SemiBold, color = colors.text)
-            Text(appText("第一位选中的成员为管理员。"), fontSize = 14.sp, lineHeight = 21.sp,
-                color = colors.secondary, modifier = Modifier.testTag("bot.group.admin-note"))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                draft.memberIds.forEachIndexed { index, id ->
-                    val bot = snapshot.roster.firstOrNull { it.id == id } ?: return@forEachIndexed
-                    Row(Modifier.clip(CircleShape).background(colors.soft).testTag("bot.group.remove.$id")
-                        .clickable(enabled = !locked, role = Role.Button) { holder.toggleConversationMember(id) }
-                        .padding(horizontal = 10.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text("${index + 1} ${bot.name}" + if (index == 0) " · " + appText("管理员") else "",
-                            color = colors.accent, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-                        ManagementIcon(R.drawable.ic_close, colors.text, 12.dp)
+            }) {
+            if (group) {
+                Text(appText("选择群聊成员"), fontSize = 28.sp, fontWeight = FontWeight.SemiBold, color = colors.text)
+                Text(appText("第一位选中的成员为管理员。"), fontSize = 14.sp, lineHeight = 21.sp,
+                    color = colors.secondary, modifier = Modifier.testTag("bot.group.admin-note"))
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    draft.memberIds.forEachIndexed { index, id ->
+                        val bot = snapshot.roster.firstOrNull { it.id == id } ?: return@forEachIndexed
+                        Row(Modifier.clip(CircleShape).background(colors.soft).testTag("bot.group.remove.$id")
+                            .clickable(enabled = !locked, role = Role.Button) { holder.toggleConversationMember(id) }
+                            .padding(horizontal = 10.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("${index + 1} ${bot.name}" + if (index == 0) " · " + appText("管理员") else "",
+                                color = colors.accent, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                            ManagementIcon(R.drawable.ic_close, colors.text, 12.dp)
+                        }
                     }
                 }
             }
-        }
-        BasicTextField(query, { query = it }, Modifier.fillMaxWidth().testTag("bot.conversation.search")
-            .background(colors.card, CircleShape).padding(horizontal = 20.dp, vertical = 14.dp),
-            singleLine = true, textStyle = rosterTextStyle.copy(color = colors.text, fontSize = 17.sp),
-            cursorBrush = SolidColor(colors.accent), decorationBox = { field ->
-                Box { if (query.isEmpty()) Text(appText("搜索名称或角色"), color = colors.secondary.copy(alpha = .6f), fontSize = 17.sp); field() }
-            })
-        ManagementSection(colors) {
-            candidates.forEachIndexed { index, bot ->
-                val order = draft.memberIds.indexOf(bot.id)
-                val admin = appText("管理员")
-                val selected = appText("已选择")
-                Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).testTag("bot.conversation.member.${bot.id}")
-                    .semantics { stateDescription = if (group && order == 0) admin else if (group && order > 0) selected else "" }
-                    .clickable(enabled = if (group) !locked else !draft.saving && (!bot.hidden || canWrite), role = Role.Button) {
-                        if (group) holder.toggleConversationMember(bot.id) else holder.openConversationBot(bot.id)
-                    }.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    BotAvatar(bot, 36.dp, snapshot.isMainBot(bot.id))
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                        Text(bot.name, color = colors.text, fontSize = 17.sp)
-                        if (bot.role.isNotBlank()) Text(bot.role, color = colors.secondary, fontSize = 13.sp)
-                    }
-                    if (group && order >= 0) {
-                        if (order == 0) Text(admin, color = colors.accent, fontSize = 12.sp)
-                        Text("${order + 1}", color = colors.accent, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                    }
-                }
-                if (index < candidates.lastIndex) ManagementDivider(colors.line.copy(alpha = .45f))
-            }
-            if (candidates.isEmpty()) Text(if (query.isBlank()) appText("还没有 Bot") else appText("没有找到相关 Bot"),
-                color = colors.secondary, modifier = Modifier.padding(16.dp))
-        }
-        ManagementCaption(appText("可选择已从侧边栏隐藏的 Bot。"), colors)
-        if (group) {
-            ManagementCaption(appText("首条消息（选填）"), colors)
-            BasicTextField(draft.message, holder::updateConversationMessage,
-                Modifier.fillMaxWidth().testTag("bot.group.message").managementSurface(colors).padding(16.dp),
-                enabled = !locked, minLines = 2, maxLines = 5,
-                textStyle = rosterTextStyle.copy(color = colors.text, fontSize = 16.sp, lineHeight = 22.sp),
+            BasicTextField(query, { query = it }, Modifier.fillMaxWidth().testTag("bot.conversation.search").keyboardDismissExclusion()
+                .background(colors.card, CircleShape).padding(horizontal = 20.dp, vertical = 14.dp),
+                singleLine = true, textStyle = rosterTextStyle.copy(color = colors.text, fontSize = 17.sp),
                 cursorBrush = SolidColor(colors.accent), decorationBox = { field ->
-                    Box { if (draft.message.isEmpty()) Text(appText("描述群聊用途"), color = colors.secondary, fontSize = 16.sp); field() }
+                    Box { if (query.isEmpty()) Text(appText("搜索名称或角色"), color = colors.secondary.copy(alpha = .6f), fontSize = 17.sp); field() }
                 })
-        }
-        if (!canWrite) ManagementCaption(when {
-            !snapshot.connected -> appText("连接主机后可以新建会话")
-            !snapshot.writable -> appText("当前主机为只读")
-            else -> appText("请更新主机上的移动网关以新建会话")
-        }, colors)
-        if (draft.error != null) Column(Modifier.testTag("bot.conversation.error"), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(when {
-                draft.uncertain -> appText("暂时无法确认提交结果，请返回聊天列表核对，避免重复创建或发送。")
-                draft.createdId != null -> appText("群聊已创建，首条消息发送失败。")
-                else -> appText("操作失败，请重试。")
-            }, color = Color.Red, fontSize = 13.sp)
-            if (draft.errorDetail != null) Text(requireNotNull(draft.errorDetail), color = Color.Red, fontSize = 13.sp)
-            else if (!draft.uncertain) Text(requireNotNull(draft.error), color = Color.Red, fontSize = 13.sp)
-            if (draft.uncertain && draft.createdId == null) ManagementPill(appText("已核对列表，确认未创建"), colors,
-                onClick = holder::confirmConversationNotCreated)
+            ManagementSection(colors) {
+                candidates.forEachIndexed { index, bot ->
+                    val order = draft.memberIds.indexOf(bot.id)
+                    val admin = appText("管理员")
+                    val selected = appText("已选择")
+                    Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).testTag("bot.conversation.member.${bot.id}")
+                        .semantics { stateDescription = if (group && order == 0) admin else if (group && order > 0) selected else "" }
+                        .clickable(enabled = if (group) !locked else !draft.saving && (!bot.hidden || canWrite), role = Role.Button) {
+                            if (group) holder.toggleConversationMember(bot.id) else holder.openConversationBot(bot.id)
+                        }.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        BotAvatar(bot, 36.dp, snapshot.isMainBot(bot.id))
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                            Text(bot.name, color = colors.text, fontSize = 17.sp)
+                            if (bot.role.isNotBlank()) Text(bot.role, color = colors.secondary, fontSize = 13.sp)
+                        }
+                        if (group && order >= 0) {
+                            if (order == 0) Text(admin, color = colors.accent, fontSize = 12.sp)
+                            Text("${order + 1}", color = colors.accent, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                    if (index < candidates.lastIndex) ManagementDivider(colors.line.copy(alpha = .45f))
+                }
+                if (candidates.isEmpty()) Text(if (query.isBlank()) appText("还没有 Bot") else appText("没有找到相关 Bot"),
+                    color = colors.secondary, modifier = Modifier.padding(16.dp))
+            }
+            ManagementCaption(appText("可选择已从侧边栏隐藏的 Bot。"), colors)
+            if (group) {
+                ManagementCaption(appText("首条消息（选填）"), colors)
+                BasicTextField(draft.message, holder::updateConversationMessage,
+                    Modifier.fillMaxWidth().testTag("bot.group.message").keyboardDismissExclusion().managementSurface(colors).padding(16.dp),
+                    enabled = !locked, minLines = 2, maxLines = 5,
+                    textStyle = rosterTextStyle.copy(color = colors.text, fontSize = 16.sp, lineHeight = 22.sp),
+                    cursorBrush = SolidColor(colors.accent), decorationBox = { field ->
+                        Box { if (draft.message.isEmpty()) Text(appText("描述群聊用途"), color = colors.secondary, fontSize = 16.sp); field() }
+                    })
+            }
+            if (!canWrite) ManagementCaption(when {
+                !snapshot.connected -> appText("连接主机后可以新建会话")
+                !snapshot.writable -> appText("当前主机为只读")
+                else -> appText("请更新主机上的移动网关以新建会话")
+            }, colors)
+            if (draft.error != null) Column(Modifier.testTag("bot.conversation.error"), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(when {
+                    draft.uncertain -> appText("暂时无法确认提交结果，请返回聊天列表核对，避免重复创建或发送。")
+                    draft.createdId != null -> appText("群聊已创建，首条消息发送失败。")
+                    else -> appText("操作失败，请重试。")
+                }, color = Color.Red, fontSize = 13.sp)
+                if (draft.errorDetail != null) Text(requireNotNull(draft.errorDetail), color = Color.Red, fontSize = 13.sp)
+                else if (!draft.uncertain) Text(requireNotNull(draft.error), color = Color.Red, fontSize = 13.sp)
+                if (draft.uncertain && draft.createdId == null) ManagementPill(appText("已核对列表，确认未创建"), colors,
+                    onClick = holder::confirmConversationNotCreated)
+            }
         }
     }
 }

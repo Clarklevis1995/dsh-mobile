@@ -652,6 +652,12 @@ struct BotConversationPicker: View {
     private var candidates: [BotChat] { model.conversationBots(query) }
 
     var body: some View {
+        ZStack { pickerContent }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(KeyboardDismissProbe())
+    }
+
+    private var pickerContent: some View {
         List {
             if group {
                 Section {
@@ -745,9 +751,14 @@ struct BotConversationPicker: View {
         .navigationBarTitleDisplayMode(.inline).toolbar(.visible, for: .navigationBar)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() }.disabled(draft.saving) }
-            if group { ToolbarItem(placement: .topBarTrailing) {
-                Text(String(format: String(localized: "已选 %lld"), draft.memberIds.count)).foregroundStyle(.secondary).appFont(.system(size: 14))
-            } }
+            if group {
+                if #available(iOS 26.0, *) {
+                    ToolbarItem(placement: .topBarTrailing) { memberCountLabel }
+                        .sharedBackgroundVisibility(.hidden)
+                } else {
+                    ToolbarItem(placement: .topBarTrailing) { memberCountLabel }
+                }
+            }
         }
         .navigationBarBackButtonHidden(true).tint(BotManagementStyle.accent)
         .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -771,6 +782,11 @@ struct BotConversationPicker: View {
             }
         }
         .onChangeCompat(of: draft.openedId) { _, id in if let id { openChat(id) } }
+    }
+
+    private var memberCountLabel: some View {
+        Text(String(format: String(localized: "已选 %lld"), draft.memberIds.count))
+            .foregroundStyle(.secondary).appFont(.system(size: 14))
     }
 }
 

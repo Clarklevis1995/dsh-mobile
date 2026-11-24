@@ -1,17 +1,6 @@
 {
   "sourceLanguage" : "zh-Hans",
   "strings" : {
-    "已核对列表，确认未创建" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "I checked the list; no group was created"
-          }
-        }
-      }
-    },
     " 等工具" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -803,7 +792,9 @@
         }
       }
     },
-    "+%@" : {},
+    "+%@" : {
+
+    },
     "+%@  −%@" : {
       "localizations" : {
         "zh-Hans" : {
@@ -836,7 +827,9 @@
         }
       }
     },
-    "−%@" : {},
+    "−%@" : {
+
+    },
     "0s" : {
       "localizations" : {
         "en" : {
@@ -10761,6 +10754,17 @@
         }
       }
     },
+    "不填写首条消息时，管理员会先询问群聊用途。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Leave the first message empty to let the administrator ask about the group’s purpose."
+          }
+        }
+      }
+    },
     "不重复" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -14068,6 +14072,17 @@
         }
       }
     },
+    "创建群聊 · %lld 位 Bot" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Create group · %lld Bots"
+          }
+        }
+      }
+    },
     "创造模式" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -14131,57 +14146,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "删除 Bot？"
-          }
-        }
-      }
-    },
-    "复制对话 ID" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Copy Conversation ID"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "会話IDをコピー"
-          }
-        }
-      }
-    },
-    "置顶" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Pin"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ピン留め"
-          }
-        }
-      }
-    },
-    "取消置顶" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Unpin"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ピン留めを解除"
           }
         }
       }
@@ -15228,6 +15192,23 @@
         }
       }
     },
+    "取消置顶" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unpin"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ピン留めを解除"
+          }
+        }
+      }
+    },
     "取消连接" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -15417,6 +15398,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "可用模型"
+          }
+        }
+      }
+    },
+    "可选择已从侧边栏隐藏的 Bot。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bots hidden from the sidebar are also available."
           }
         }
       }
@@ -16445,6 +16437,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "复制分工和模型，新 Bot 从空白记忆开始。"
+          }
+        }
+      }
+    },
+    "复制对话 ID" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copy Conversation ID"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "会話IDをコピー"
           }
         }
       }
@@ -18496,6 +18505,17 @@
         }
       }
     },
+    "已核对列表，确认未创建" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "I checked the list; no group was created"
+          }
+        }
+      }
+    },
     "已登录" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -18809,6 +18829,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "已选"
+          }
+        }
+      }
+    },
+    "已选 %lld" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld selected"
+          }
+        }
+      }
+    },
+    "已选择" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Selected"
           }
         }
       }
@@ -21623,6 +21665,17 @@
         }
       }
     },
+    "描述群聊用途" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Describe the purpose of this group"
+          }
+        }
+      }
+    },
     "提交" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -21855,6 +21908,17 @@
         }
       }
     },
+    "搜索名称或角色" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Search by name or role"
+          }
+        }
+      }
+    },
     "搜索地点" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -22055,6 +22119,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "操作に失敗しました。しばらくしてからもう一度お試しください。"
+          }
+        }
+      }
+    },
+    "操作失败，请重试。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The operation failed. Please try again."
           }
         }
       }
@@ -23078,6 +23153,17 @@
         }
       }
     },
+    "新建对话" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New conversation"
+          }
+        }
+      }
+    },
     "新建提醒事项" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -23125,6 +23211,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "新規フォルダを作成"
+          }
+        }
+      }
+    },
+    "新建群聊" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New group chat"
           }
         }
       }
@@ -24489,6 +24586,17 @@
         }
       }
     },
+    "暂时无法确认提交结果，请返回聊天列表核对，避免重复创建或发送。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The result could not be confirmed. Check your chats before creating or sending again."
+          }
+        }
+      }
+    },
     "暂时无法读取引用" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -25627,6 +25735,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "ミニマルモード"
+          }
+        }
+      }
+    },
+    "查找 Bot" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Find a Bot"
+          }
+        }
+      }
+    },
+    "查找 Bot…" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Find a Bot…"
           }
         }
       }
@@ -28116,6 +28246,17 @@
         }
       }
     },
+    "没有找到相关 Bot" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No matching Bots"
+          }
+        }
+      }
+    },
     "没有找到相关聊天" : {
       "localizations" : {
         "en" : {
@@ -29431,6 +29572,17 @@
         }
       }
     },
+    "移除 %@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Remove %@"
+          }
+        }
+      }
+    },
     "移除图片" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -29660,6 +29812,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "ターン %lld · 次のステップを待機中"
+          }
+        }
+      }
+    },
+    "第一位选中的成员为管理员。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The first member you select becomes the administrator."
           }
         }
       }
@@ -30044,6 +30207,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "管理 Bot 保存的信息，这些信息可用于后续对话。"
+          }
+        }
+      }
+    },
+    "管理员" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Administrator"
           }
         }
       }
@@ -31097,6 +31271,23 @@
         }
       }
     },
+    "置顶" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pin"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ピン留め"
+          }
+        }
+      }
+    },
     "群成员" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -31142,6 +31333,17 @@
         }
       }
     },
+    "群聊已创建，首条消息发送失败。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The group was created, but the first message could not be sent."
+          }
+        }
+      }
+    },
     "翻阅已有线索中" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -31177,7 +31379,6 @@
       }
     },
     "聊天" : {
-      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -32566,6 +32767,17 @@
         }
       }
     },
+    "请更新主机上的移动网关以新建会话" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Update the mobile gateway on your host to start conversations"
+          }
+        }
+      }
+    },
     "请更新主机上的移动网关和 DS Bot 后再创建 Bot" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -33909,6 +34121,17 @@
         }
       }
     },
+    "进入群聊" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open group chat"
+          }
+        }
+      }
+    },
     "进行中" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -34070,6 +34293,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "连接主机后可以创建 Bot"
+          }
+        }
+      }
+    },
+    "连接主机后可以新建会话" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connect to the host to start a conversation"
           }
         }
       }
@@ -34697,6 +34931,17 @@
         }
       }
     },
+    "选择群聊成员" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose group members"
+          }
+        }
+      }
+    },
     "选项" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -35060,6 +35305,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "重试上传"
+          }
+        }
+      }
+    },
+    "重试发送首条消息" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Retry first message"
           }
         }
       }
@@ -35701,6 +35957,17 @@
         }
       }
     },
+    "首条消息（选填）" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "First message (optional)"
+          }
+        }
+      }
+    },
     "首次新建并复用会话" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -35926,270 +36193,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "デフォルト設定の更新に失敗しました"
-          }
-        }
-      }
-    },
-    "新建对话" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "New conversation"
-          }
-        }
-      }
-    },
-    "新建群聊" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "New group chat"
-          }
-        }
-      }
-    },
-    "查找 Bot…" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Find a Bot…"
-          }
-        }
-      }
-    },
-    "查找 Bot" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Find a Bot"
-          }
-        }
-      }
-    },
-    "选择群聊成员" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Choose group members"
-          }
-        }
-      }
-    },
-    "第一位选中的成员为管理员。" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The first member you select becomes the administrator."
-          }
-        }
-      }
-    },
-    "管理员" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Administrator"
-          }
-        }
-      }
-    },
-    "已选择" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Selected"
-          }
-        }
-      }
-    },
-    "搜索名称或角色" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Search by name or role"
-          }
-        }
-      }
-    },
-    "可选择已从侧边栏隐藏的 Bot。" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Bots hidden from the sidebar are also available."
-          }
-        }
-      }
-    },
-    "没有找到相关 Bot" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "No matching Bots"
-          }
-        }
-      }
-    },
-    "首条消息（选填）" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "First message (optional)"
-          }
-        }
-      }
-    },
-    "描述群聊用途" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Describe the purpose of this group"
-          }
-        }
-      }
-    },
-    "连接主机后可以新建会话" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Connect to the host to start a conversation"
-          }
-        }
-      }
-    },
-    "请更新主机上的移动网关以新建会话" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Update the mobile gateway on your host to start conversations"
-          }
-        }
-      }
-    },
-    "暂时无法确认提交结果，请返回聊天列表核对，避免重复创建或发送。" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The result could not be confirmed. Check your chats before creating or sending again."
-          }
-        }
-      }
-    },
-    "群聊已创建，首条消息发送失败。" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The group was created, but the first message could not be sent."
-          }
-        }
-      }
-    },
-    "操作失败，请重试。" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The operation failed. Please try again."
-          }
-        }
-      }
-    },
-    "不填写首条消息时，管理员会先询问群聊用途。" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Leave the first message empty to let the administrator ask about the group’s purpose."
-          }
-        }
-      }
-    },
-    "重试发送首条消息" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Retry first message"
-          }
-        }
-      }
-    },
-    "进入群聊" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Open group chat"
-          }
-        }
-      }
-    },
-    "创建群聊 · %lld 位 Bot" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Create group · %lld Bots"
-          }
-        }
-      }
-    },
-    "已选 %lld" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld selected"
-          }
-        }
-      }
-    },
-    "移除 %@" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Remove %@"
           }
         }
       }

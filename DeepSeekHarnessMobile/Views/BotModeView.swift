@@ -649,7 +649,7 @@ struct BotModeView: View {
                 }
             }
         } label: {
-            Image(systemName: "plus").font(.system(size: 19, weight: .regular)).frame(width: 44, height: 40)
+            Image(systemName: "plus").font(.system(size: 17, weight: .regular)).frame(width: 28, height: 28)
         }
         .glassCircleButton(onDarkBackground: colorScheme == .dark)
         .accessibilityLabel("新建对话")

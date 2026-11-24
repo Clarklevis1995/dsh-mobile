@@ -1112,7 +1112,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = ActionIcon;
 				CODE_SIGN_ENTITLEMENTS = ShareExtension/ShareExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 44;
+				CURRENT_PROJECT_VERSION = 45;
 				DEVELOPMENT_TEAM = "$(LOCAL_DEVELOPMENT_TEAM)";
 				DSH_SHARE_APP_GROUP = "$(LOCAL_APP_GROUP)";
 				GENERATE_INFOPLIST_FILE = NO;
@@ -1123,7 +1123,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.8.5;
+				MARKETING_VERSION = 1.8.6;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(LOCAL_BUNDLE_IDENTIFIER).ActionExtension$(LOCAL_EXTENSION_SUFFIX)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -1193,7 +1193,7 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_ENTITLEMENTS = ShareExtension/ShareExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 44;
+				CURRENT_PROJECT_VERSION = 45;
 				DEVELOPMENT_TEAM = T58RY5HUA7;
 				DSH_SHARE_APP_GROUP = "group.$(LOCAL_BUNDLE_IDENTIFIER)";
 				"DSH_SHARE_APP_GROUP[sdk=iphoneos*]" = group.com.lichaofan.dshmobile.t58ry5hua7;
@@ -1205,7 +1205,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.8.5;
+				MARKETING_VERSION = 1.8.6;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(LOCAL_BUNDLE_IDENTIFIER).ShareExtension";
 				"PRODUCT_BUNDLE_IDENTIFIER[sdk=iphoneos*]" = "com.lichaofan.dshmobile.ShareExtension-t58ry5hua7";
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -1223,7 +1223,7 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_ENTITLEMENTS = ShareExtension/ShareExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 44;
+				CURRENT_PROJECT_VERSION = 45;
 				DEVELOPMENT_TEAM = "$(LOCAL_DEVELOPMENT_TEAM)";
 				DSH_SHARE_APP_GROUP = "$(LOCAL_APP_GROUP)";
 				GENERATE_INFOPLIST_FILE = NO;
@@ -1234,7 +1234,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.8.5;
+				MARKETING_VERSION = 1.8.6;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(LOCAL_BUNDLE_IDENTIFIER).ShareExtension$(LOCAL_EXTENSION_SUFFIX)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -1393,7 +1393,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = ActionIcon;
 				CODE_SIGN_ENTITLEMENTS = ShareExtension/ShareExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 44;
+				CURRENT_PROJECT_VERSION = 45;
 				DEVELOPMENT_TEAM = T58RY5HUA7;
 				DSH_SHARE_APP_GROUP = "group.$(LOCAL_BUNDLE_IDENTIFIER)";
 				"DSH_SHARE_APP_GROUP[sdk=iphoneos*]" = group.com.lichaofan.dshmobile.t58ry5hua7;
@@ -1405,7 +1405,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.8.5;
+				MARKETING_VERSION = 1.8.6;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(LOCAL_BUNDLE_IDENTIFIER).ActionExtension";
 				"PRODUCT_BUNDLE_IDENTIFIER[sdk=iphoneos*]" = "com.lichaofan.dshmobile.ActionExtension-t58ry5hua7";
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -1429,7 +1429,7 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 44;
+				CURRENT_PROJECT_VERSION = 45;
 				DEVELOPMENT_TEAM = "$(LOCAL_DEVELOPMENT_TEAM)";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = AgentLiveActivityWidget/Info.plist;
@@ -1440,7 +1440,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
-				MARKETING_VERSION = 1.8.5;
+				MARKETING_VERSION = 1.8.6;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(LOCAL_BUNDLE_IDENTIFIER).AgentLiveActivityWidget$(LOCAL_EXTENSION_SUFFIX)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -1458,7 +1458,7 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 44;
+				CURRENT_PROJECT_VERSION = 45;
 				DEVELOPMENT_TEAM = T58RY5HUA7;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = AgentLiveActivityWidget/Info.plist;
@@ -1469,7 +1469,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
-				MARKETING_VERSION = 1.8.5;
+				MARKETING_VERSION = 1.8.6;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(LOCAL_BUNDLE_IDENTIFIER).AgentLiveActivityWidget";
 				"PRODUCT_BUNDLE_IDENTIFIER[sdk=iphoneos*]" = com.lichaofan.dshmobile.AgentLiveActivityWidget;
 				PRODUCT_NAME = "$(TARGET_NAME)";

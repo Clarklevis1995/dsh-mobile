@@ -1,6 +1,13 @@
 package com.clarklevis.dsh.android.ui
 
 import android.app.Activity
+import android.net.Uri
+import androidx.lifecycle.compose.LifecycleEventEffect
+import androidx.navigation.NavType
+import androidx.navigation.navArgument
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
 import android.os.SystemClock
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -216,29 +223,27 @@ internal fun BotModeScreen(holder: AndroidSharedStateHolder, onStandardMode: () 
         }
     }
     val homeListState = rememberLazyListState()
-    var opened by rememberSaveable { mutableStateOf<String?>(null) }
+    val navigation = rememberNavController()
+    val entry by navigation.currentBackStackEntryAsState()
+    val opened = entry?.arguments?.getString("chatId")
+    val showingHome = entry == null || entry?.destination?.route == "home"
     var chatSearch by rememberSaveable { mutableStateOf("") }
     var schedules by rememberSaveable { mutableStateOf(false) }
-    var roster by rememberSaveable { mutableStateOf(false) }
-    var newBot by rememberSaveable { mutableStateOf(false) }
-    var conversationPicker by rememberSaveable { mutableStateOf<Boolean?>(null) }
-    LaunchedEffect(state.conversation.openedId) {
-        state.conversation.openedId?.let { id ->
-            conversationPicker = null
-            focus.clearFocus()
-            holder.selectBotChat(id)
-            opened = id
-        }
-    }
     var roleId by rememberSaveable { mutableStateOf<String?>(null) }
     var memberRoomId by rememberSaveable { mutableStateOf<String?>(null) }
     val role = state.chats.firstOrNull { it.id == roleId && !it.room }
-    val openedExists = opened == null || state.chats.any { it.id == opened }
-    LaunchedEffect(openedExists, roleId, role?.id) {
-        if (!openedExists) {
-            opened = null
-            holder.selectBotChat(null)
+    LaunchedEffect(state.conversation.openedId) {
+        state.conversation.openedId?.let { id ->
+            focus.clearFocus()
+            holder.selectBotChat(id)
+            navigation.navigate("chat/${Uri.encode(id)}") {
+                popUpTo("home")
+                launchSingleTop = true
+            }
         }
+    }
+    LaunchedEffect(opened, state.chats, roleId, role?.id) {
+        if (opened != null && state.chats.none { it.id == opened }) navigation.popBackStack("home", false)
         if (role == null) roleId = null
     }
     val showProfile: (String) -> Unit = { roleId = it }
@@ -249,115 +254,138 @@ internal fun BotModeScreen(holder: AndroidSharedStateHolder, onStandardMode: () 
                 val fullHeight = maxHeight + WindowInsets.ime.asPaddingValues().calculateBottomPadding()
                 val wide = maxWidth >= 760.dp && fullHeight >= 500.dp && LocalDensity.current.fontScale < 1.5f
                 val leftWidth = minOf(440.dp, maxWidth * .38f)
-                SideEffect { onChatOpened(opened != null || roster || newBot || conversationPicker != null) }
-                val closeChat = {
-                    focus.clearFocus()
-                    opened = null
-                    holder.selectBotChat(null)
-                }
-                BackHandler(enabled = opened != null, onBack = closeChat)
+                SideEffect { onChatOpened(!showingHome) }
+                val closeChat = { focus.clearFocus(); navigation.popBotPage() }
                 val homeHeader: @Composable () -> Unit = header ?: {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         WorkspaceHeader(holder.gatewayState, {}, {}, {}, openDrawer, onDarkBackground = false)
                         GatewaySwitcherBar(onDarkBackground = false)
                     }
                 }
-                val showingHome = opened == null && !roster && !newBot && conversationPicker == null
-                DshLiquidGlassHost(modifier = Modifier.fillMaxSize(), frostOnOlderDevices = showingHome,
-                    workspaceScrollState = homeListState.takeIf { showingHome }, background = { backdrop ->
-                    if (showingHome) HarnessAnimatedBackground(backdrop,
-                        animationEnabled = scrollEnabled && !holder.botDesignPreview, lavender = true,
-                        modeWave = modeWave)
-                    else Box(backdrop.fillMaxSize().background(chatSurface))
-                }) {
-                    val select: (String) -> Unit = { focus.clearFocus(); holder.selectBotChat(it); opened = it }
-                    if (conversationPicker != null) {
-                        BotConversationPicker(holder, requireNotNull(conversationPicker)) { conversationPicker = null }
-                    } else if (newBot) {
-                        BotManagementFlow(holder, onDismiss = { newBot = false }, showRole = showProfile, startCreating = true)
-                    } else if (roster) {
-                        BotManagementFlow(holder, onDismiss = { roster = false }, showRole = showProfile)
-                    } else if (opened != null) {
-                        val chatId = requireNotNull(opened)
-                        WorkspaceFilePreviewHost(holder, botChatId = chatId)
-                        val backdrop = rememberLayerBackdrop()
-                        val density = LocalDensity.current
-                        val initialInset = with(density) { WindowInsets.statusBars.getTop(this).toDp() } + 64.dp
-                        var topInset by remember(density) { mutableStateOf(initialInset) }
-                        MaterialTheme(colorScheme = MaterialTheme.colorScheme.copy(background = chatSurface, surface = chatSurface)) {
-                            KeyboardDismissHost(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)
-                                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))) {
-                                BotChatContent(holder, chatId, colors, Modifier.fillMaxSize().layerBackdrop(backdrop),
-                                    topInset, showProfile) { imagePreview = it }
-                                ConversationTopGlass(backdrop, topInset)
-                                Box(Modifier.onSizeChanged { topInset = with(density) { it.height.toDp() } }) {
-                                    BotChatHeader(state, chatId, closeChat,
-                                        { schedules = true }, holder::refreshBotMode, showProfile) { memberRoomId = chatId }
-                                }
-                            }
+                val select: (String) -> Unit = { id ->
+                    if (navigation.currentBackStackEntry?.lifecycle?.currentState == Lifecycle.State.RESUMED) {
+                        focus.clearFocus()
+                        holder.selectBotChat(id)
+                        navigation.pushBotPage("chat/${Uri.encode(id)}")
+                    }
+                }
+                BotNavigationHost(navigation, "home", Modifier.fillMaxSize()) {
+                    composable("group") {
+                        BotDestinationSurface(chatSurface) { BotConversationPicker(holder, true) { navigation.popBotPage() } }
+                    }
+                    composable("find") {
+                        BotDestinationSurface(chatSurface) { BotConversationPicker(holder, false) { navigation.popBotPage() } }
+                    }
+                    composable("create") {
+                        BotDestinationSurface(chatSurface) {
+                            BotManagementFlow(holder, onDismiss = { navigation.popBotPage() }, showRole = showProfile, startCreating = true)
                         }
-                    } else {
-                        val chats = holder.searchBotChats(chatSearch)
-                        val safePadding = WindowInsets.safeDrawing.asPaddingValues()
-                        val direction = LocalLayoutDirection.current
-                        val assistant: @Composable (Modifier) -> Unit = { modifier ->
-                            BotAssistantContent(state, colors, modifier, wide, select, { schedules = true },
-                                { roster = true }, holder::refreshBotMode, showProfile)
+                    }
+                    composable("roster") {
+                        BotDestinationSurface(chatSurface) {
+                            BotManagementFlow(holder, onDismiss = { navigation.popBotPage() }, showRole = showProfile)
                         }
-                        val chatHeader: @Composable () -> Unit = {
-                            BotChatSectionHeader(colors, chats.size, chatSearch, wide,
-                                error = state.conversation.error?.let { state.conversation.errorDetail ?: it }, actions = {
-                                BotNewConversationMenu(holder, colors, { newBot = true }, {
-                                    holder.beginBotConversation(); conversationPicker = true
-                                }, { holder.beginBotConversation(); conversationPicker = false })
-                            }) { chatSearch = it }
+                    }
+                    composable("chat/{chatId}", arguments = listOf(navArgument("chatId") { type = NavType.StringType })) { chatEntry ->
+                        val chatId = requireNotNull(chatEntry.arguments?.getString("chatId"))
+                        LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+                            if (holder.botSnapshot.selectedChatId != chatId) holder.selectBotChat(chatId)
+                            holder.consumeBotConversationNavigation(chatId)
                         }
-                        val searching = chatSearch.isNotBlank()
-                        if (wide) {
-                            Column(
-                                Modifier.fillMaxSize().padding(safePadding).adaptiveContentWidth(AdaptiveLayout.WorkspaceWidth)
-                                    .padding(start = 40.dp, top = 18.dp, end = 40.dp),
-                                verticalArrangement = Arrangement.spacedBy(40.dp),
-                            ) {
-                                homeHeader()
-                                Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(48.dp)) {
-                                    Column(Modifier.width(leftWidth).verticalScroll(rememberScrollState(), enabled = scrollEnabled)
-                                        .padding(bottom = 24.dp)) {
-                                        assistant(Modifier.fillMaxWidth())
-                                    }
-                                    LazyColumn(
-                                        Modifier.weight(1f).testTag("bot.wide-chats"),
-                                        state = homeListState, userScrollEnabled = scrollEnabled,
-                                        contentPadding = PaddingValues(bottom = 24.dp),
-                                    ) {
-                                        item(key = "bot-chat-heading", contentType = "heading") { chatHeader() }
-                                        botChatItems(chats, state, searching, select)
+                        BotDestinationSurface(chatSurface) {
+                            WorkspaceFilePreviewHost(holder, botChatId = chatId)
+                            val backdrop = rememberLayerBackdrop()
+                            val density = LocalDensity.current
+                            val initialInset = with(density) { WindowInsets.statusBars.getTop(this).toDp() } + 64.dp
+                            var topInset by remember(density) { mutableStateOf(initialInset) }
+                            MaterialTheme(colorScheme = MaterialTheme.colorScheme.copy(background = chatSurface, surface = chatSurface)) {
+                                KeyboardDismissHost(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)
+                                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))) {
+                                    BotChatContent(holder, chatId, colors, Modifier.fillMaxSize().layerBackdrop(backdrop),
+                                        topInset, showProfile) { imagePreview = it }
+                                    ConversationTopGlass(backdrop, topInset)
+                                    Box(Modifier.onSizeChanged { topInset = with(density) { it.height.toDp() } }) {
+                                        BotChatHeader(state, chatId, closeChat,
+                                            { schedules = true }, holder::refreshBotMode, showProfile) { memberRoomId = chatId }
                                     }
                                 }
                             }
-                        } else {
-                            LazyColumn(
-                                Modifier.fillMaxSize().adaptiveContentWidth(AdaptiveLayout.WorkspaceWidth).testTag("bot.home"),
-                                state = homeListState, userScrollEnabled = scrollEnabled,
-                                // 安全区只影响内容初始位置，滚动视口覆盖状态栏和导航栏。
-                                contentPadding = PaddingValues(
-                                    start = safePadding.calculateStartPadding(direction) + 22.dp,
-                                    top = safePadding.calculateTopPadding() + 18.dp,
-                                    end = safePadding.calculateEndPadding(direction) + 22.dp,
-                                    bottom = safePadding.calculateBottomPadding() + 16.dp,
-                                ),
-                            ) {
-                                item(key = "bot-home-header", contentType = "header") {
-                                    Column {
-                                        homeHeader()
-                                        Spacer(Modifier.height(76.dp))
+                        }
+                    }
+                    composable("home") {
+                        LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+                            holder.selectBotChat(null)
+                        }
+                        DshLiquidGlassHost(modifier = Modifier.fillMaxSize(), frostOnOlderDevices = true,
+                            workspaceScrollState = homeListState, background = { backdrop ->
+                                HarnessAnimatedBackground(backdrop,
+                                    animationEnabled = scrollEnabled && !holder.botDesignPreview,
+                                    lavender = true, modeWave = modeWave)
+                            }) {
+                            val chats = holder.searchBotChats(chatSearch)
+                            val safePadding = WindowInsets.safeDrawing.asPaddingValues()
+                            val direction = LocalLayoutDirection.current
+                            val assistant: @Composable (Modifier) -> Unit = { modifier ->
+                                BotAssistantContent(state, colors, modifier, wide, select, { schedules = true },
+                                    { navigation.pushBotPage("roster") }, holder::refreshBotMode, showProfile)
+                            }
+                            val chatHeader: @Composable () -> Unit = {
+                                BotChatSectionHeader(colors, chats.size, chatSearch, wide,
+                                    error = state.conversation.error?.let { state.conversation.errorDetail ?: it }, actions = {
+                                    BotNewConversationMenu(holder, colors, {
+                                        holder.openBotCreation(); navigation.pushBotPage("create")
+                                    }, {
+                                        holder.beginBotConversation(); navigation.pushBotPage("group")
+                                    }, { holder.beginBotConversation(); navigation.pushBotPage("find") })
+                                }) { chatSearch = it }
+                            }
+                            val searching = chatSearch.isNotBlank()
+                            if (wide) {
+                                Column(
+                                    Modifier.fillMaxSize().padding(safePadding).adaptiveContentWidth(AdaptiveLayout.WorkspaceWidth)
+                                        .padding(start = 40.dp, top = 18.dp, end = 40.dp),
+                                    verticalArrangement = Arrangement.spacedBy(40.dp),
+                                ) {
+                                    homeHeader()
+                                    Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(48.dp)) {
+                                        Column(Modifier.width(leftWidth).verticalScroll(rememberScrollState(), enabled = scrollEnabled)
+                                            .padding(bottom = 24.dp)) {
+                                            assistant(Modifier.fillMaxWidth())
+                                        }
+                                        LazyColumn(
+                                            Modifier.weight(1f).testTag("bot.wide-chats"),
+                                            state = homeListState, userScrollEnabled = scrollEnabled,
+                                            contentPadding = PaddingValues(bottom = 24.dp),
+                                        ) {
+                                            item(key = "bot-chat-heading", contentType = "heading") { chatHeader() }
+                                            botChatItems(chats, state, searching, select)
+                                        }
                                     }
                                 }
-                                item(key = "bot-home-assistant", contentType = "assistant") {
-                                    assistant(Modifier.fillMaxWidth().padding(bottom = 16.dp))
+                            } else {
+                                LazyColumn(
+                                    Modifier.fillMaxSize().adaptiveContentWidth(AdaptiveLayout.WorkspaceWidth).testTag("bot.home"),
+                                    state = homeListState, userScrollEnabled = scrollEnabled,
+                                    // 安全区只影响内容初始位置，滚动视口覆盖状态栏和导航栏。
+                                    contentPadding = PaddingValues(
+                                        start = safePadding.calculateStartPadding(direction) + 22.dp,
+                                        top = safePadding.calculateTopPadding() + 18.dp,
+                                        end = safePadding.calculateEndPadding(direction) + 22.dp,
+                                        bottom = safePadding.calculateBottomPadding() + 16.dp,
+                                    ),
+                                ) {
+                                    item(key = "bot-home-header", contentType = "header") {
+                                        Column {
+                                            homeHeader()
+                                            Spacer(Modifier.height(76.dp))
+                                        }
+                                    }
+                                    item(key = "bot-home-assistant", contentType = "assistant") {
+                                        assistant(Modifier.fillMaxWidth().padding(bottom = 16.dp))
+                                    }
+                                    item(key = "bot-chat-heading", contentType = "heading") { chatHeader() }
+                                    botChatItems(chats, state, searching, select)
                                 }
-                                item(key = "bot-chat-heading", contentType = "heading") { chatHeader() }
-                                botChatItems(chats, state, searching, select)
                             }
                         }
                     }
@@ -378,6 +406,14 @@ internal fun BotModeScreen(holder: AndroidSharedStateHolder, onStandardMode: () 
             }
         }
     }
+}
+
+/** 每个目的地独立采样背景，转场时不改变仍在退出的上一页材质。 */
+@Composable
+private fun BotDestinationSurface(surface: Color, content: @Composable () -> Unit) {
+    DshLiquidGlassHost(modifier = Modifier.fillMaxSize(), background = {
+        Box(it.fillMaxSize().background(surface))
+    }) { content() }
 }
 
 @Composable
@@ -1746,7 +1782,9 @@ private fun BotRolePanel(holder: AndroidSharedStateHolder, chat: BotChat, colors
     val night = isSystemInDarkTheme()
     val state = holder.botSnapshot
     val profile = chat.profile
-    var page by rememberSaveable(chat.id) { mutableStateOf(BotRolePage.Profile) }
+    val navigation = rememberNavController()
+    val entry by navigation.currentBackStackEntryAsState()
+    val page = entry?.destination?.route?.let(BotRolePage::valueOf) ?: BotRolePage.Profile
     var name by rememberSaveable(chat.id) { mutableStateOf(chat.name) }
     var tag by rememberSaveable(chat.id) { mutableStateOf(chat.role) }
     var instructions by rememberSaveable(chat.id) { mutableStateOf(profile?.instructions.orEmpty()) }
@@ -1787,10 +1825,13 @@ private fun BotRolePanel(holder: AndroidSharedStateHolder, chat: BotChat, colors
     val effectiveModel = profile?.model ?: profile?.appliedModel ?: state.defaultModel
     val effortRef = model.ifEmpty { profile?.appliedModel ?: state.defaultModel.orEmpty() }
     val openPage: (BotRolePage) -> Unit = { target ->
-        returnTo = page
+        if (page == BotRolePage.Profile || page == BotRolePage.Settings) returnTo = page
         revealedRowId = null
-        page = target
-        pageScope.launch { pageScroll[target.ordinal].scrollToItem(0) }
+        if (navigation.previousBackStackEntry?.destination?.route == target.name) navigation.popBotPage()
+        else {
+            navigation.pushBotPage(target.name)
+            pageScope.launch { pageScroll[target.ordinal].scrollToItem(0) }
+        }
     }
     val details = state.roleDetails?.takeIf { it.botId == chat.id }
     val schedules = state.schedules.filter { it.botId == chat.id }
@@ -1817,12 +1858,7 @@ private fun BotRolePanel(holder: AndroidSharedStateHolder, chat: BotChat, colors
     }
     val goBack = {
         revealedRowId = null
-        page = when (page) {
-            BotRolePage.NewSchedule -> BotRolePage.Schedule
-            BotRolePage.MemoryEditor -> BotRolePage.Memory
-            BotRolePage.Memory, BotRolePage.Schedule -> returnTo
-            else -> BotRolePage.Profile
-        }
+        navigation.popBotPage()
     }
     val showsMemory = page == BotRolePage.Memory
     val showsSchedule = page == BotRolePage.Schedule
@@ -1841,7 +1877,7 @@ private fun BotRolePanel(holder: AndroidSharedStateHolder, chat: BotChat, colors
     }, action = {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             if (page == BotRolePage.Profile) {
-                TopBarCircleButton(R.drawable.ic_settings_outline, appText("角色设置"), { page = BotRolePage.Settings },
+                TopBarCircleButton(R.drawable.ic_settings_outline, appText("角色设置"), { openPage(BotRolePage.Settings) },
                     Modifier.testTag("bot.role-settings"))
                 if (night) TopBarCircleButton(R.drawable.ic_close, appText("关闭"), dismiss, Modifier.testTag("bot.role-close"))
             } else {
@@ -1863,7 +1899,7 @@ private fun BotRolePanel(holder: AndroidSharedStateHolder, chat: BotChat, colors
                         memoryEntryId = null
                         memoryText = ""
                         revealedRowId = null
-                        page = BotRolePage.MemoryEditor
+                        openPage(BotRolePage.MemoryEditor)
                     }, Modifier.size(44.dp).testTag("bot.role-memory-add"), enabled = editable) {
                         Icon(painterResource(R.drawable.ic_add), null, Modifier.size(22.dp))
                     }
@@ -1871,7 +1907,7 @@ private fun BotRolePanel(holder: AndroidSharedStateHolder, chat: BotChat, colors
                 if (page == BotRolePage.MemoryEditor) {
                     DshGlassButton(appText("保存"), {
                         holder.saveBotMemory(chat.id, memoryEntryId, memoryText)
-                        page = BotRolePage.Memory
+                        openPage(BotRolePage.Memory)
                     }, Modifier.widthIn(min = 68.dp).height(44.dp).testTag("bot.memory-save"),
                         enabled = editable && memoryText.isNotBlank()) {
                         Text(appText("保存"), Modifier.padding(horizontal = 14.dp), style = SettingsTypography.item, maxLines = 1)
@@ -1883,7 +1919,7 @@ private fun BotRolePanel(holder: AndroidSharedStateHolder, chat: BotChat, colors
                         taskPrompt = ""
                         taskTime = SimpleDateFormat("HH:mm", Locale.US).format(Date())
                         revealedRowId = null
-                        page = BotRolePage.NewSchedule
+                        openPage(BotRolePage.NewSchedule)
                         pageScope.launch { pageScroll[BotRolePage.NewSchedule.ordinal].scrollToItem(0) }
                     }, Modifier.size(44.dp).testTag("bot.role-schedule-add"), enabled = canEditSchedule) {
                         Icon(painterResource(R.drawable.ic_add), null, Modifier.size(22.dp))
@@ -1892,7 +1928,7 @@ private fun BotRolePanel(holder: AndroidSharedStateHolder, chat: BotChat, colors
                 if (showsScheduleForm) {
                     DshGlassButton(appText("保存"), {
                         holder.scheduleBotDaily(chat.id, taskName, taskPrompt, taskTime)
-                        page = BotRolePage.Schedule
+                        openPage(BotRolePage.Schedule)
                     }, Modifier.widthIn(min = 68.dp).height(44.dp).testTag("bot.role-schedule-save"),
                         enabled = canEditSchedule && taskName.isNotBlank() && taskPrompt.isNotBlank()) {
                         Text(appText("保存"), Modifier.padding(horizontal = 14.dp), style = SettingsTypography.item, maxLines = 1)
@@ -1901,272 +1937,286 @@ private fun BotRolePanel(holder: AndroidSharedStateHolder, chat: BotChat, colors
             }
         }
     }) {
-        if (page == BotRolePage.MemoryEditor) {
-            KeyboardDismissHost(Modifier.weight(1f).fillMaxWidth().imePadding().padding(top = 8.dp, bottom = 16.dp)) {
-                Box(Modifier.fillMaxSize().clip(RoundedCornerShape(20.dp)).background(colors.row).padding(12.dp)) {
-                    BotRoleField(
-                        appText("记忆"), memoryText, enabled = true, multiline = true,
-                        modifier = Modifier.fillMaxSize().padding(horizontal = 5.dp).testTag("bot.memory-editor")
-                    ) { memoryText = it }
-                }
-            }
-            return@BotPanel
-        }
-        KeyboardDismissHost(Modifier.weight(1f).fillMaxWidth()) {
-            val showsProfile = page == BotRolePage.Profile
-            val showsSettings = page == BotRolePage.Settings
-            LazyColumn(Modifier.fillMaxSize().testTag("bot.role-panel"), state = pageScroll[page.ordinal],
-                verticalArrangement = Arrangement.spacedBy(when {
-                    showsProfile -> 35.dp
-                    showsSettings -> 15.dp
-                    showsMemory || showsSchedule -> 0.dp
-                    else -> 12.dp
-                }),
-                contentPadding = PaddingValues(top = if (showsMemory || showsSchedule || showsScheduleForm) 28.dp else 0.dp,
-                    bottom = 12.dp)) {
-                if (showsProfile) item {
-                    Column(Modifier.fillMaxWidth().padding(top = 52.dp, bottom = 18.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        BotAvatar(chat, 80.dp, main)
-                        Text(chat.name, style = SettingsTypography.item.copy(fontSize = 32.sp, lineHeight = 40.sp,
-                            fontWeight = FontWeight.Bold), color = colors.text, textAlign = TextAlign.Center)
-                        if (chat.role.isNotEmpty()) {
-                            Text(chat.role, style = SettingsTypography.item.copy(fontSize = 15.sp, lineHeight = 18.sp),
-                                color = colors.secondary, textAlign = TextAlign.Center)
-                        }
-                        if (!profile?.instructions.isNullOrBlank()) {
-                            Text(profile.instructions, style = SettingsTypography.description.copy(fontSize = 13.sp),
-                                color = colors.secondary, textAlign = TextAlign.Center)
-                        }
-                    }
-                }
-                when (page) {
-                    BotRolePage.Profile -> {
-                        val rowHeight = 52.dp
-                        item { SettingsSection(horizontalPadding = 20.dp, cornerRadius = 26.dp) {
-                            SettingsValueRow(
-                                appText("模型"),
-                                state.models.firstOrNull { it.id == effectiveModel }?.title ?: effectiveModel ?: "—",
-                                minHeight = rowHeight,
-                            )
-                            SettingsDivider()
-                            SettingsValueRow(
-                                appText("权限"),
-                                state.permissions.firstOrNull { it.id == profile?.permission }?.title ?: profile?.permission ?: "—",
-                                minHeight = rowHeight,
-                            )
-                            SettingsDivider()
-                            SettingsValueRow(
-                                appText("工作文件夹"), profile?.workDir ?: appText("总工作区"),
-                                minHeight = rowHeight, valueMaxLines = Int.MAX_VALUE,
-                            )
-                        } }
-                        item { SettingsSection(horizontalPadding = 20.dp, cornerRadius = 26.dp) {
-                            if (state.memoryAvailable) {
-                                SettingsValueRow(appText("记忆"), details?.memories?.size?.toString() ?: "—", minHeight = rowHeight) {
-                                    openPage(BotRolePage.Memory)
-                                }
-                                SettingsDivider()
-                            }
-                            SettingsValueRow(appText("定时任务"), schedules.size.toString(), minHeight = rowHeight) {
-                                openPage(BotRolePage.Schedule)
-                            }
-                            details?.let { value ->
-                                val input = value.inputTokens
-                                val output = value.outputTokens
-                                if (input != null && output != null) {
-                                    SettingsDivider()
-                                    SettingsValueRow(appText("近 30 天用量"),
-                                        java.text.NumberFormat.getInstance().format(input + output), minHeight = rowHeight)
+        BotNavigationHost(navigation, BotRolePage.Profile.name, Modifier.weight(1f).fillMaxWidth()) {
+            BotRolePage.entries.forEach { destination ->
+                composable(destination.name) {
+                    // 每个 entry 保留自己的正文、滚动位置和转场中的旧画面。
+                    val page = destination
+                    val showsMemory = page == BotRolePage.Memory
+                    val showsSchedule = page == BotRolePage.Schedule
+                    val showsScheduleForm = page == BotRolePage.NewSchedule
+                    val surface = if (night && (showsMemory || showsSchedule || showsScheduleForm)) Color(0xFF1C1C1E) else colors.panel
+                    Column(Modifier.fillMaxSize().background(surface)) rolePage@ {
+                        if (page == BotRolePage.MemoryEditor) {
+                            KeyboardDismissHost(Modifier.weight(1f).fillMaxWidth().imePadding().padding(top = 8.dp, bottom = 16.dp)) {
+                                Box(Modifier.fillMaxSize().clip(RoundedCornerShape(20.dp)).background(colors.row).padding(12.dp)) {
+                                    BotRoleField(
+                                        appText("记忆"), memoryText, enabled = true, multiline = true,
+                                        modifier = Modifier.fillMaxSize().padding(horizontal = 5.dp).testTag("bot.memory-editor")
+                                    ) { memoryText = it }
                                 }
                             }
-                        } }
-                    }
-                    BotRolePage.Settings -> {
-                        item {
-                            Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 44.dp, bottom = 27.dp)
-                                .testTag("bot.role-settings-identity"),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                BotAvatar(chat, 56.dp, main)
-                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    Text(chat.name, style = SettingsTypography.title.copy(fontSize = 22.sp, lineHeight = 28.sp,
-                                        fontWeight = FontWeight.Bold), color = colors.text)
-                                    if (chat.role.isNotEmpty()) {
-                                        Text(chat.role, style = SettingsTypography.description, color = colors.secondary)
-                                    }
-                                }
-                            }
+                            return@rolePage
                         }
-                        item {
-                            BotRoleSettingsSection(appText("资料"), footer = appText("标签为选填，会显示在 Bot 名字下方。")) {
-                                BotRoleField(appText("名字"), name, editable, minHeight = botRoleSettingsRowHeight) { name = it }
-                                SettingsDivider()
-                                BotRoleField(appText("标签"), tag, editable, minHeight = botRoleSettingsRowHeight) { tag = it }
-                            }
-                        }
-                        item {
-                            BotRoleSettingsSection(appText("模型"), footer = appText("模型更改从下一条消息开始生效。")) {
-                                BotRoleSelector(appText("模型"), model, appText("默认模型"), state.models, editable,
-                                    minHeight = botRoleSettingsRowHeight, modifier = Modifier.testTag("bot.role-model-picker")) {
-                                    if (model != it) { model = it; effort = "" }
-                                }
-                                val efforts = state.efforts.takeIf { state.effortModel == effortRef }.orEmpty()
-                                if (efforts.isNotEmpty() || effort.isNotEmpty()) {
-                                    SettingsDivider()
-                                    BotRoleSelector(appText("推理强度"), effort, appText("默认"), efforts, editable,
-                                        minHeight = botRoleSettingsRowHeight) { effort = it }
-                                }
-                            }
-                        }
-                        item {
-                            BotRoleSettingsSection(appText("工作区与权限"), footer = permissionFooter) {
-                                BotRoleField(appText("工作文件夹"), workDir, editable, appText("总工作区"),
-                                    minHeight = botRoleSettingsRowHeight) { workDir = it }
-                                SettingsDivider()
-                                BotRoleSelector(appText("权限"), permission, appText("默认权限"), state.permissions, editable,
-                                    minHeight = botRoleSettingsRowHeight) {
-                                    permission = it
-                                }
-                                SettingsDivider()
-                                val canTogglePrivacy = editable && !main
-                                Row(Modifier.fillMaxWidth().heightIn(min = botRoleSettingsRowHeight)
-                                    .toggleable(privateRole, enabled = canTogglePrivacy, role = Role.Switch, onValueChange = { privateRole = it }),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Text(appText("隐私"), Modifier.weight(1f), style = SettingsTypography.item)
-                                    DshSwitch(privateRole, onCheckedChange = null, enabled = canTogglePrivacy, wideTrack = true)
-                                }
-                            }
-                        }
-                        item {
-                            BotRoleSettingsSection(appText("说明"), footer = appText("这段说明会写入 Bot 的系统提示词。")) {
-                                BotRoleField(appText("说明"), instructions, editable, appText("这个 Bot 负责什么…"),
-                                    multiline = true) { instructions = it }
-                            }
-                        }
-                        item {
-                            BotRoleSettingsSection(appText("操控"), footer = appText("各 Bot 的电脑操控授权可在 DS Bot 网页端管理。")) {
-                                SettingsValueRow(appText("电脑操控"), appText(if (state.computerEnabled) "已开启" else "已关闭"),
-                                    minHeight = botRoleSettingsRowHeight)
-                            }
-                        }
-                        item {
-                            BotRoleSettingsSection {
-                                if (state.memoryAvailable) {
-                                    SettingsValueRow(appText("记忆"), "", enabled = editable, minHeight = botRoleSettingsRowHeight) { openPage(BotRolePage.Memory) }
-                                    SettingsDivider()
-                                }
-                                SettingsValueRow(appText("定时任务"), "", enabled = editable, minHeight = botRoleSettingsRowHeight) { openPage(BotRolePage.Schedule) }
-                            }
-                        }
-                        if (main) item {
-                            BotRoleSettingsSection(appText("主 Bot"), footer = appText("主 Bot 可以创建和修改团队 Bot，并管理群聊。")) {
-                                val candidates = state.chats.filter { !it.room && it.id != chat.id && it.profile?.privateRole != true }
-                                var menu by remember { mutableStateOf(false) }
-                                Box {
-                                    SettingsValueRow(appText("更换主 Bot"), "", enabled = editable && candidates.isNotEmpty(),
-                                        minHeight = botRoleSettingsRowHeight, showIndicator = false) { menu = true }
-                                    DshMenu(menu, { menu = false }) {
-                                        candidates.forEach { candidate ->
-                                            DshMenuItem({ Text(candidate.name) }, { menu = false; replacement = candidate })
+                        KeyboardDismissHost(Modifier.weight(1f).fillMaxWidth()) {
+                            val showsProfile = page == BotRolePage.Profile
+                            val showsSettings = page == BotRolePage.Settings
+                            LazyColumn(Modifier.fillMaxSize().testTag("bot.role-panel"), state = pageScroll[page.ordinal],
+                                verticalArrangement = Arrangement.spacedBy(when {
+                                    showsProfile -> 35.dp
+                                    showsSettings -> 15.dp
+                                    showsMemory || showsSchedule -> 0.dp
+                                    else -> 12.dp
+                                }),
+                                contentPadding = PaddingValues(top = if (showsMemory || showsSchedule || showsScheduleForm) 28.dp else 0.dp,
+                                    bottom = 12.dp)) {
+                                if (showsProfile) item {
+                                    Column(Modifier.fillMaxWidth().padding(top = 52.dp, bottom = 18.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        BotAvatar(chat, 80.dp, main)
+                                        Text(chat.name, style = SettingsTypography.item.copy(fontSize = 32.sp, lineHeight = 40.sp,
+                                            fontWeight = FontWeight.Bold), color = colors.text, textAlign = TextAlign.Center)
+                                        if (chat.role.isNotEmpty()) {
+                                            Text(chat.role, style = SettingsTypography.item.copy(fontSize = 15.sp, lineHeight = 18.sp),
+                                                color = colors.secondary, textAlign = TextAlign.Center)
+                                        }
+                                        if (!profile?.instructions.isNullOrBlank()) {
+                                            Text(profile.instructions, style = SettingsTypography.description.copy(fontSize = 13.sp),
+                                                color = colors.secondary, textAlign = TextAlign.Center)
                                         }
                                     }
                                 }
-                            }
-                        }
-                        item {
-                            BotRoleSettingsSection(appText("管理"), footer = appText("复制分工和模型，新 Bot 从空白记忆开始。")) {
-                                SettingsValueRow(appText("复制一份"), "", enabled = editable,
-                                    minHeight = botRoleSettingsRowHeight, showIndicator = false) { confirmCopy = true }
-                                if (showsDelete) {
-                                    SettingsDivider()
-                                    SettingsValueRow(
-                                        appText("删除 Bot"), "", enabled = editable,
-                                        modifier = Modifier.testTag("bot.role-delete"), destructive = true, minHeight = botRoleSettingsRowHeight,
-                                        onClick = { confirmDelete = true }
-                                    )
+                                when (page) {
+                                    BotRolePage.Profile -> {
+                                        val rowHeight = 52.dp
+                                        item { SettingsSection(horizontalPadding = 20.dp, cornerRadius = 26.dp) {
+                                            SettingsValueRow(
+                                                appText("模型"),
+                                                state.models.firstOrNull { it.id == effectiveModel }?.title ?: effectiveModel ?: "—",
+                                                minHeight = rowHeight,
+                                            )
+                                            SettingsDivider()
+                                            SettingsValueRow(
+                                                appText("权限"),
+                                                state.permissions.firstOrNull { it.id == profile?.permission }?.title ?: profile?.permission ?: "—",
+                                                minHeight = rowHeight,
+                                            )
+                                            SettingsDivider()
+                                            SettingsValueRow(
+                                                appText("工作文件夹"), profile?.workDir ?: appText("总工作区"),
+                                                minHeight = rowHeight, valueMaxLines = Int.MAX_VALUE,
+                                            )
+                                        } }
+                                        item { SettingsSection(horizontalPadding = 20.dp, cornerRadius = 26.dp) {
+                                            if (state.memoryAvailable) {
+                                                SettingsValueRow(appText("记忆"), details?.memories?.size?.toString() ?: "—", minHeight = rowHeight) {
+                                                    openPage(BotRolePage.Memory)
+                                                }
+                                                SettingsDivider()
+                                            }
+                                            SettingsValueRow(appText("定时任务"), schedules.size.toString(), minHeight = rowHeight) {
+                                                openPage(BotRolePage.Schedule)
+                                            }
+                                            details?.let { value ->
+                                                val input = value.inputTokens
+                                                val output = value.outputTokens
+                                                if (input != null && output != null) {
+                                                    SettingsDivider()
+                                                    SettingsValueRow(appText("近 30 天用量"),
+                                                        java.text.NumberFormat.getInstance().format(input + output), minHeight = rowHeight)
+                                                }
+                                            }
+                                        } }
+                                    }
+                                    BotRolePage.Settings -> {
+                                        item {
+                                            Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 44.dp, bottom = 27.dp)
+                                                .testTag("bot.role-settings-identity"),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                                BotAvatar(chat, 56.dp, main)
+                                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                    Text(chat.name, style = SettingsTypography.title.copy(fontSize = 22.sp, lineHeight = 28.sp,
+                                                        fontWeight = FontWeight.Bold), color = colors.text)
+                                                    if (chat.role.isNotEmpty()) {
+                                                        Text(chat.role, style = SettingsTypography.description, color = colors.secondary)
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        item {
+                                            BotRoleSettingsSection(appText("资料"), footer = appText("标签为选填，会显示在 Bot 名字下方。")) {
+                                                BotRoleField(appText("名字"), name, editable, minHeight = botRoleSettingsRowHeight) { name = it }
+                                                SettingsDivider()
+                                                BotRoleField(appText("标签"), tag, editable, minHeight = botRoleSettingsRowHeight) { tag = it }
+                                            }
+                                        }
+                                        item {
+                                            BotRoleSettingsSection(appText("模型"), footer = appText("模型更改从下一条消息开始生效。")) {
+                                                BotRoleSelector(appText("模型"), model, appText("默认模型"), state.models, editable,
+                                                    minHeight = botRoleSettingsRowHeight, modifier = Modifier.testTag("bot.role-model-picker")) {
+                                                    if (model != it) { model = it; effort = "" }
+                                                }
+                                                val efforts = state.efforts.takeIf { state.effortModel == effortRef }.orEmpty()
+                                                if (efforts.isNotEmpty() || effort.isNotEmpty()) {
+                                                    SettingsDivider()
+                                                    BotRoleSelector(appText("推理强度"), effort, appText("默认"), efforts, editable,
+                                                        minHeight = botRoleSettingsRowHeight) { effort = it }
+                                                }
+                                            }
+                                        }
+                                        item {
+                                            BotRoleSettingsSection(appText("工作区与权限"), footer = permissionFooter) {
+                                                BotRoleField(appText("工作文件夹"), workDir, editable, appText("总工作区"),
+                                                    minHeight = botRoleSettingsRowHeight) { workDir = it }
+                                                SettingsDivider()
+                                                BotRoleSelector(appText("权限"), permission, appText("默认权限"), state.permissions, editable,
+                                                    minHeight = botRoleSettingsRowHeight) {
+                                                    permission = it
+                                                }
+                                                SettingsDivider()
+                                                val canTogglePrivacy = editable && !main
+                                                Row(Modifier.fillMaxWidth().heightIn(min = botRoleSettingsRowHeight)
+                                                    .toggleable(privateRole, enabled = canTogglePrivacy, role = Role.Switch, onValueChange = { privateRole = it }),
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                    Text(appText("隐私"), Modifier.weight(1f), style = SettingsTypography.item)
+                                                    DshSwitch(privateRole, onCheckedChange = null, enabled = canTogglePrivacy, wideTrack = true)
+                                                }
+                                            }
+                                        }
+                                        item {
+                                            BotRoleSettingsSection(appText("说明"), footer = appText("这段说明会写入 Bot 的系统提示词。")) {
+                                                BotRoleField(appText("说明"), instructions, editable, appText("这个 Bot 负责什么…"),
+                                                    multiline = true) { instructions = it }
+                                            }
+                                        }
+                                        item {
+                                            BotRoleSettingsSection(appText("操控"), footer = appText("各 Bot 的电脑操控授权可在 DS Bot 网页端管理。")) {
+                                                SettingsValueRow(appText("电脑操控"), appText(if (state.computerEnabled) "已开启" else "已关闭"),
+                                                    minHeight = botRoleSettingsRowHeight)
+                                            }
+                                        }
+                                        item {
+                                            BotRoleSettingsSection {
+                                                if (state.memoryAvailable) {
+                                                    SettingsValueRow(appText("记忆"), "", enabled = editable, minHeight = botRoleSettingsRowHeight) { openPage(BotRolePage.Memory) }
+                                                    SettingsDivider()
+                                                }
+                                                SettingsValueRow(appText("定时任务"), "", enabled = editable, minHeight = botRoleSettingsRowHeight) { openPage(BotRolePage.Schedule) }
+                                            }
+                                        }
+                                        if (main) item {
+                                            BotRoleSettingsSection(appText("主 Bot"), footer = appText("主 Bot 可以创建和修改团队 Bot，并管理群聊。")) {
+                                                val candidates = state.chats.filter { !it.room && it.id != chat.id && it.profile?.privateRole != true }
+                                                var menu by remember { mutableStateOf(false) }
+                                                Box {
+                                                    SettingsValueRow(appText("更换主 Bot"), "", enabled = editable && candidates.isNotEmpty(),
+                                                        minHeight = botRoleSettingsRowHeight, showIndicator = false) { menu = true }
+                                                    DshMenu(menu, { menu = false }) {
+                                                        candidates.forEach { candidate ->
+                                                            DshMenuItem({ Text(candidate.name) }, { menu = false; replacement = candidate })
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        item {
+                                            BotRoleSettingsSection(appText("管理"), footer = appText("复制分工和模型，新 Bot 从空白记忆开始。")) {
+                                                SettingsValueRow(appText("复制一份"), "", enabled = editable,
+                                                    minHeight = botRoleSettingsRowHeight, showIndicator = false) { confirmCopy = true }
+                                                if (showsDelete) {
+                                                    SettingsDivider()
+                                                    SettingsValueRow(
+                                                        appText("删除 Bot"), "", enabled = editable,
+                                                        modifier = Modifier.testTag("bot.role-delete"), destructive = true, minHeight = botRoleSettingsRowHeight,
+                                                        onClick = { confirmDelete = true }
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                    BotRolePage.Memory -> {
+                                        val memories = details?.memories.orEmpty()
+                                        if (memories.isEmpty()) item {
+                                            BotRoleSettingsSection {
+                                                Text(appText("还没有记忆"), Modifier.padding(vertical = 16.dp),
+                                                    style = SettingsTypography.item, color = colors.secondary)
+                                            }
+                                        }
+                                        itemsIndexed(memories, key = { _, memory -> memory.id }) { index, memory ->
+                                            BotRoleListRow(
+                                                modifier = Modifier.testTag("bot.role-memory.${memory.id}"),
+                                                first = index == 0,
+                                                last = index == memories.lastIndex,
+                                                canDelete = editable,
+                                                revealed = revealedRowId == memory.id,
+                                                onReveal = { revealedRowId = memory.id },
+                                                onClose = { revealedRowId = null },
+                                                onDelete = { deleteMemory = memory },
+                                                onClick = if (editable) ({
+                                                    memoryEntryId = memory.id
+                                                    memoryText = memory.text
+                                                    revealedRowId = null
+                                                    openPage(BotRolePage.MemoryEditor)
+                                                }) else null,
+                                            ) {
+                                                Box(Modifier.heightIn(min = 52.dp).padding(vertical = 12.dp),
+                                                    contentAlignment = Alignment.CenterStart) {
+                                                    Text(memory.text, style = SettingsTypography.item, color = MaterialTheme.colorScheme.onSurface)
+                                                }
+                                            }
+                                        }
+                                    }
+                                    BotRolePage.MemoryEditor -> Unit
+                                    BotRolePage.Schedule -> {
+                                        if (schedules.isEmpty()) item {
+                                            BotRoleSettingsSection {
+                                                Text(appText("还没有定时任务"), Modifier.padding(vertical = 16.dp),
+                                                    style = SettingsTypography.item, color = colors.secondary)
+                                            }
+                                        }
+                                        itemsIndexed(schedules, key = { _, schedule -> schedule.id }) { index, schedule ->
+                                            BotRoleListRow(
+                                                modifier = Modifier.testTag("bot.role-schedule.${schedule.id}"),
+                                                first = index == 0,
+                                                last = index == schedules.lastIndex,
+                                                canDelete = canEditSchedule && !schedule.sessionId.isNullOrBlank(),
+                                                revealed = revealedRowId == schedule.id,
+                                                onReveal = { revealedRowId = schedule.id },
+                                                onClose = { revealedRowId = null },
+                                                onDelete = { deleteSchedule = schedule },
+                                            ) {
+                                                BotRoleScheduleText(schedule.title, schedule.next)
+                                            }
+                                        }
+                                    }
+                                    BotRolePage.NewSchedule -> item {
+                                        BotRoleSettingsSection {
+                                            BotRoleField(appText("任务名称"), taskName, canEditSchedule, showsLabel = false,
+                                                modifier = Modifier.testTag("bot.role-schedule-name"), minHeight = 52.dp) { taskName = it }
+                                            SettingsDivider()
+                                            BotRoleField(appText("任务内容"), taskPrompt, canEditSchedule, multiline = true, showsLabel = false,
+                                                modifier = Modifier.testTag("bot.role-schedule-prompt"), minHeight = 52.dp) { taskPrompt = it }
+                                            SettingsDivider()
+                                            Row(
+                                                Modifier.fillMaxWidth().heightIn(min = 64.dp),
+                                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                            ) {
+                                                Text(appText("每天运行时间"), Modifier.weight(1f), style = SettingsTypography.item)
+                                                DshCompactTimePicker(taskTime, canEditSchedule, Modifier.testTag("bot.role-schedule-time")) {
+                                                    taskTime = it
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
-                            }
-                        }
-                    }
-                    BotRolePage.Memory -> {
-                        val memories = details?.memories.orEmpty()
-                        if (memories.isEmpty()) item {
-                            BotRoleSettingsSection {
-                                Text(appText("还没有记忆"), Modifier.padding(vertical = 16.dp),
-                                    style = SettingsTypography.item, color = colors.secondary)
-                            }
-                        }
-                        itemsIndexed(memories, key = { _, memory -> memory.id }) { index, memory ->
-                            BotRoleListRow(
-                                modifier = Modifier.testTag("bot.role-memory.${memory.id}"),
-                                first = index == 0,
-                                last = index == memories.lastIndex,
-                                canDelete = editable,
-                                revealed = revealedRowId == memory.id,
-                                onReveal = { revealedRowId = memory.id },
-                                onClose = { revealedRowId = null },
-                                onDelete = { deleteMemory = memory },
-                                onClick = if (editable) ({
-                                    memoryEntryId = memory.id
-                                    memoryText = memory.text
-                                    revealedRowId = null
-                                    page = BotRolePage.MemoryEditor
-                                }) else null,
-                            ) {
-                                Box(Modifier.heightIn(min = 52.dp).padding(vertical = 12.dp),
-                                    contentAlignment = Alignment.CenterStart) {
-                                    Text(memory.text, style = SettingsTypography.item, color = MaterialTheme.colorScheme.onSurface)
-                                }
-                            }
-                        }
-                    }
-                    BotRolePage.MemoryEditor -> Unit
-                    BotRolePage.Schedule -> {
-                        if (schedules.isEmpty()) item {
-                            BotRoleSettingsSection {
-                                Text(appText("还没有定时任务"), Modifier.padding(vertical = 16.dp),
-                                    style = SettingsTypography.item, color = colors.secondary)
-                            }
-                        }
-                        itemsIndexed(schedules, key = { _, schedule -> schedule.id }) { index, schedule ->
-                            BotRoleListRow(
-                                modifier = Modifier.testTag("bot.role-schedule.${schedule.id}"),
-                                first = index == 0,
-                                last = index == schedules.lastIndex,
-                                canDelete = canEditSchedule && !schedule.sessionId.isNullOrBlank(),
-                                revealed = revealedRowId == schedule.id,
-                                onReveal = { revealedRowId = schedule.id },
-                                onClose = { revealedRowId = null },
-                                onDelete = { deleteSchedule = schedule },
-                            ) {
-                                BotRoleScheduleText(schedule.title, schedule.next)
-                            }
-                        }
-                    }
-                    BotRolePage.NewSchedule -> item {
-                        BotRoleSettingsSection {
-                            BotRoleField(appText("任务名称"), taskName, canEditSchedule, showsLabel = false,
-                                modifier = Modifier.testTag("bot.role-schedule-name"), minHeight = 52.dp) { taskName = it }
-                            SettingsDivider()
-                            BotRoleField(appText("任务内容"), taskPrompt, canEditSchedule, multiline = true, showsLabel = false,
-                                modifier = Modifier.testTag("bot.role-schedule-prompt"), minHeight = 52.dp) { taskPrompt = it }
-                            SettingsDivider()
-                            Row(
-                                Modifier.fillMaxWidth().heightIn(min = 64.dp),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text(appText("每天运行时间"), Modifier.weight(1f), style = SettingsTypography.item)
-                                DshCompactTimePicker(taskTime, canEditSchedule, Modifier.testTag("bot.role-schedule-time")) {
-                                    taskTime = it
-                                }
+                                state.roleError?.let { error -> item { Text(botErrorText(error), color = MaterialTheme.colorScheme.error) } }
                             }
                         }
                     }
                 }
-                state.roleError?.let { error -> item { Text(botErrorText(error), color = MaterialTheme.colorScheme.error) } }
             }
         }
     }
