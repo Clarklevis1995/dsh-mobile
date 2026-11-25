@@ -64,6 +64,7 @@ fun DeepSeekHarnessAndroidApp() {
     val application = context.applicationContext as DshAndroidApplication
     val hosts = application.hosts
     if (!hosts.ready) return
+    LaunchedEffect(application.pendingSessionLink) { application.resolvePendingSessionLink() }
     val notificationRoute = application.pendingNotificationSession
     LaunchedEffect(notificationRoute, hosts.activeId) {
         if (notificationRoute != null && notificationRoute.gatewayId != hosts.activeId) {

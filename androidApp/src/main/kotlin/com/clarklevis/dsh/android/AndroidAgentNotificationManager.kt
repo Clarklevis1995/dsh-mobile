@@ -13,8 +13,11 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.clarklevis.dsh.shared.facade.SharedMobileSnapshot
+import com.clarklevis.dsh.shared.gateway.GatewayProfile
 import com.clarklevis.dsh.shared.protocol.GatewayFrame
 import org.json.JSONArray
+import java.net.URI
+import java.net.URLDecoder
 
 internal const val EXTRA_NOTIFICATION_GATEWAY_ID = "com.clarklevis.dsh.android.notification.GATEWAY_ID"
 internal const val EXTRA_NOTIFICATION_SESSION_ID = "com.clarklevis.dsh.android.notification.SESSION_ID"
@@ -22,7 +25,36 @@ internal const val EXTRA_NOTIFICATION_SESSION_ID = "com.clarklevis.dsh.android.n
 internal data class AndroidNotificationSessionRoute(
     val gatewayId: String,
     val sessionId: String,
-)
+) {
+    companion object {
+        /**
+         * 与 iOS 相同的会话链接：`dshmobile://session?gatewayId=<网关身份>&id=<会话>`。
+         * 旧参数 `gateway=<本机主机 ID>` 优先，仍只允许打开当前主机；无效时不回退到网关身份。
+         */
+        fun parseDeepLink(link: String, profiles: List<GatewayProfile>, activeLocalId: String?): AndroidNotificationSessionRoute? {
+            val uri = runCatching { URI(link) }.getOrNull() ?: return null
+            if (uri.scheme != "dshmobile" || uri.host != "session") return null
+            val query = uri.rawQuery.orEmpty().split('&').mapNotNull { pair ->
+                val name = pair.substringBefore('=')
+                if (name.isEmpty() || '=' !in pair) return@mapNotNull null
+                // 只做百分号解码；与 iOS URLComponents 一致，'+' 不当作空格。
+                val value = runCatching { URLDecoder.decode(pair.substringAfter('=').replace("+", "%2B"), "UTF-8") }
+                    .getOrNull() ?: return@mapNotNull null
+                name to value
+            }
+            fun first(name: String) = query.firstOrNull { it.first == name }?.second
+            val sessionId = first("id")?.takeIf(String::isNotBlank) ?: return null
+            val localGateway = query.firstOrNull { it.first == "gateway" }
+            val localId = if (localGateway != null) {
+                localGateway.second.takeIf { it == activeLocalId } ?: return null
+            } else {
+                val identity = first("gatewayId")?.takeIf(String::isNotBlank) ?: return null
+                profiles.firstOrNull { it.gatewayId.equals(identity, ignoreCase = true) }?.localId ?: return null
+            }
+            return AndroidNotificationSessionRoute(localId, sessionId)
+        }
+    }
+}
 
 /** 复用实时请求的通知入口，后台切换时只补发仍需用户处理的请求。 */
 internal fun pendingAgentNotificationFrames(snapshot: SharedMobileSnapshot): List<GatewayFrame> =
