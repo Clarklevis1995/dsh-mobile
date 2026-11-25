@@ -37,5 +37,7 @@ class MainActivity : ComponentActivity() {
         (application as DshAndroidApplication).openNotificationSession(intent)
         intent?.removeExtra(EXTRA_NOTIFICATION_GATEWAY_ID)
         intent?.removeExtra(EXTRA_NOTIFICATION_SESSION_ID)
+        // 重建 Activity 时不重复打开同一链接。
+        if (intent?.action == Intent.ACTION_VIEW) intent.data = null
     }
 }

@@ -96,12 +96,26 @@ class DshAndroidApplication :
     internal var pendingNotificationSession by mutableStateOf<AndroidNotificationSessionRoute?>(null)
         private set
 
+    internal var pendingSessionLink by mutableStateOf<String?>(null)
+        private set
+
     internal fun openNotificationSession(intent: Intent?) {
         val gatewayId = intent?.getStringExtra(EXTRA_NOTIFICATION_GATEWAY_ID)?.takeIf(String::isNotBlank)
         val sessionId = intent?.getStringExtra(EXTRA_NOTIFICATION_SESSION_ID)?.takeIf(String::isNotBlank)
         if (gatewayId != null && sessionId != null) {
             pendingNotificationSession = AndroidNotificationSessionRoute(gatewayId, sessionId)
+        } else if (intent?.action == Intent.ACTION_VIEW) {
+            intent.dataString?.let { pendingSessionLink = it }
         }
+    }
+
+    /** 会话链接按网关自身身份寻址，须等已保存主机加载后才能换算成本机主机 ID。 */
+    internal fun resolvePendingSessionLink() {
+        val link = pendingSessionLink ?: return
+        if (!hosts.ready) return
+        pendingSessionLink = null
+        AndroidNotificationSessionRoute.parseDeepLink(link, hosts.profiles, hosts.activeId)
+            ?.let { pendingNotificationSession = it }
     }
 
     internal fun clearNotificationSession(route: AndroidNotificationSessionRoute) {

@@ -64,6 +64,13 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="*/*" />
             </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <!-- 与 iOS 一致：任何 dshmobile:// 链接都能拉起 App，session 链接再打开对应会话。 -->
+                <data android:scheme="dshmobile" />
+            </intent-filter>
         </activity>
         <!-- 方向请求仅属于表格预览，聊天 Activity 不持有临时横屏状态。 -->
         <activity
