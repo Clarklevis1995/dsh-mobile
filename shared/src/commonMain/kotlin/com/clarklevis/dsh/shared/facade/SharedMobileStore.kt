@@ -681,6 +681,9 @@ class SharedMobileFacade {
     fun decodeFrameKind(json: String): String? =
         runCatching { GatewayWireDecoder.decode(json).kind }.getOrNull()
 
+    fun validateConversationPatch(patchJson: String): Boolean =
+        SharedConversationPatchGuard.validate(patchJson)
+
     fun makeStore(): SharedMobileStore = SharedMobileStore()
 
     fun makeSessionListStore(

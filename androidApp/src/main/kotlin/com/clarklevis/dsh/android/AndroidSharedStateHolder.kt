@@ -32,6 +32,8 @@ import com.clarklevis.dsh.shared.gateway.GatewayRuntimeEvent
 import com.clarklevis.dsh.shared.gateway.GatewayRuntimeState
 import com.clarklevis.dsh.shared.gateway.gatewayAttachmentCacheKey
 import com.clarklevis.dsh.shared.i18n.UiMessage
+import com.clarklevis.dsh.shared.projection.GenuiActionEffect
+import com.clarklevis.dsh.shared.projection.GenuiActionType
 import com.clarklevis.dsh.shared.projection.TrajectoryNode
 import com.clarklevis.dsh.shared.protocol.GatewayApprovalOutcome
 import com.clarklevis.dsh.shared.protocol.GatewayDirectoryItem
@@ -596,6 +598,7 @@ class AndroidSharedStateHolder(
             val wasFragment = localSearchIsFragment
             localSearchIsOpening = false
             localSearchIsFragment = fragment
+            genuiPresentationGeneration += 1
             if (!found) {
                 localSearchScrollTarget = null
                 localSearchContextSessionId = null
@@ -813,6 +816,8 @@ class AndroidSharedStateHolder(
         private set
     var platformError: String? by mutableStateOf(null)
         private set
+    var genuiDetails: String? by mutableStateOf(null)
+        private set
     var successfulMessageSendCount: Long by mutableLongStateOf(0L)
         private set
     var defaultConfigurationLoadingKinds: Set<String> by mutableStateOf(emptySet())
@@ -931,6 +936,7 @@ class AndroidSharedStateHolder(
         private set
     var cacheViewGeneration by mutableLongStateOf(0L)
         private set
+    private var genuiPresentationGeneration = 0L
 
     fun returnToLatestCached() {
         val appGraph = graph ?: return
@@ -944,6 +950,7 @@ class AndroidSharedStateHolder(
                 localSearchIsOpening = false
                 localSearchIsFragment = false
                 cacheViewGeneration += 1
+                genuiPresentationGeneration += 1
             }
             if (!hadNormal && gatewayState.connection == GatewayConnectionState.CONNECTED) projectionActor.loadHistory(id, older = false)
         }
@@ -998,6 +1005,7 @@ class AndroidSharedStateHolder(
         applySessionAgentPresetTransition(sessionAgentPresetStore.leave())
         pendingSelectedSessionId = sessionId
         inputGeneration += 1
+        genuiPresentationGeneration += 1
         applySlashCommandTransition(slashCommandStore.reset(sessionId))
         val afterPublish = {
             if (pendingSelectedSessionId == sessionId) pendingSelectedSessionId = null
@@ -2650,12 +2658,95 @@ class AndroidSharedStateHolder(
             platformError = appText("当前为只读本地搜索片段，请先返回最新消息。")
             return
         }
-        val appGraph = graph ?: return
         if (pendingMessageSubmission != null || sessionAgentPreset.blocksSending || teamMode.pending) return
         if (fileUploads.preparing || (fileUploads.drafts.isNotEmpty() &&
             (!fileUploads.canSend || fileUploads.sessionId != snapshot.selectedSessionId || isViewingTeamMember))) return
-        val submission = captureMessageSubmission(mode)
-        val commandExecution = if (isViewingTeamMember) null else slashCommandStore.commandExecutionForInput(submission.draft)
+        submitMessageSubmission(captureMessageSubmission(mode), mode, allowCommands = true)
+    }
+
+    fun handleGenuiAction(effect: GenuiActionEffect, sourceSessionId: String?) {
+        val currentSessionId = pendingSelectedSessionId ?: snapshot.selectedSessionId
+        if (sourceSessionId == null || effect.sessionId != sourceSessionId || currentSessionId != sourceSessionId) return
+        when (effect.type) {
+            GenuiActionType.SEND_MESSAGE -> {
+                effect.text?.let { sendGenuiMessage(it, sourceSessionId) }
+            }
+            GenuiActionType.COPY_TEXT -> {
+                val text = effect.text?.trim().orEmpty()
+                if (text.isNotEmpty()) {
+                    graph?.application?.getSystemService(android.content.ClipboardManager::class.java)
+                        ?.setPrimaryClip(android.content.ClipData.newPlainText("GenUI", text))
+                }
+            }
+            GenuiActionType.EXPAND_DETAILS -> {
+                effect.details?.trim()?.takeIf(String::isNotEmpty)?.let { genuiDetails = it }
+            }
+        }
+    }
+
+    fun submitGenuiAction(
+        actionJson: String,
+        contentVersion: String,
+        sourceSessionId: String,
+        blockId: String,
+        isSearchContext: Boolean = localSearchIsFragment || localSearchIsOpening
+    ) {
+        val holderScope = scope ?: return
+        val activeSessionId = pendingSelectedSessionId ?: snapshot.selectedSessionId
+        val currentSearchContext = localSearchIsFragment || localSearchIsOpening
+        if (activeSessionId != sourceSessionId || currentSearchContext != isSearchContext) return
+        val expectedGeneration = genuiPresentationGeneration
+        val intent = com.clarklevis.dsh.shared.projection.GenuiActionIntent(
+            sessionId = sourceSessionId,
+            activeSessionId = activeSessionId,
+            blockId = blockId,
+            contentVersion = contentVersion,
+            actionJson = actionJson,
+            isSearchContext = isSearchContext
+        )
+        holderScope.launch {
+            val effect = projectionActor.resolveGenuiAction(intent) ?: return@launch
+            val postSessionId = pendingSelectedSessionId ?: snapshot.selectedSessionId
+            val postSearchContext = localSearchIsFragment || localSearchIsOpening
+            if (postSessionId != sourceSessionId ||
+                postSearchContext != isSearchContext ||
+                genuiPresentationGeneration != expectedGeneration
+            ) {
+                return@launch
+            }
+            handleGenuiAction(effect, sourceSessionId)
+        }
+    }
+
+    fun dismissGenuiDetails() {
+        genuiDetails = null
+    }
+
+    fun sendGenuiMessage(text: String, sourceSessionId: String) {
+        val message = text.trim()
+        if (sourceSessionId != (pendingSelectedSessionId ?: snapshot.selectedSessionId)) return
+        if (message.isEmpty() || isChangingNewConversationWorkspace) return
+        if (!selectedMemberCanSend) { platformError = appText("此子智能体会话为只读，无法继续对话"); return }
+        if (localSearchIsFragment || localSearchIsOpening) {
+            platformError = appText("当前为只读本地搜索片段，请先返回最新消息。")
+            return
+        }
+        if (graph == null || pendingMessageSubmission != null || sessionAgentPreset.blocksSending || teamMode.pending) return
+        val submission = MessageSubmission(
+            generation = inputGeneration,
+            sessionId = sourceSessionId,
+            draft = message,
+            images = emptyList(),
+            preserveComposer = true
+        )
+        submitMessageSubmission(submission, "queue", allowCommands = false)
+    }
+
+    private fun submitMessageSubmission(submission: MessageSubmission, mode: String, allowCommands: Boolean) {
+        val appGraph = graph ?: return
+        val commandExecution = if (allowCommands && !isViewingTeamMember) {
+            slashCommandStore.commandExecutionForInput(submission.draft)
+        } else null
         if (commandExecution != null && submission.fileIds.isNotEmpty()) {
             platformError = appText("斜杠命令不支持文件，请使用普通消息发送")
             return
@@ -2762,6 +2853,7 @@ class AndroidSharedStateHolder(
     private fun applyMessageSendResult(submission: MessageSubmission, sent: Boolean) {
         if (!sent) return
         fileUploads.accepted(submission.fileIds)
+        if (submission.preserveComposer) return
         if (submission.sessionId != (pendingSelectedSessionId ?: snapshot.selectedSessionId)) {
             val saved = teamDrafts[submission.sessionId]
             if (saved?.first == submission.draft && saved.second == submission.images) {
@@ -3179,8 +3271,10 @@ class AndroidSharedStateHolder(
             localSearchScrollTarget = null
             localSearchIsFragment = false
             localSearchIsOpening = false
+            genuiPresentationGeneration += 1
         }
         val selectionChanged = snapshot.selectedSessionId != next.selectedSessionId
+        if (selectionChanged) genuiPresentationGeneration += 1
         snapshot = next
         publishTeamMode(load = selectionChanged)
         updatePrefetchForeground(next)
@@ -3670,7 +3764,8 @@ class AndroidSharedStateHolder(
         val images: List<AndroidPreparedImage>,
         val fileIds: List<String> = emptyList(),
         val receipts: List<String> = emptyList(),
-        val requestId: String = UUID.randomUUID().toString()
+        val requestId: String = UUID.randomUUID().toString(),
+        val preserveComposer: Boolean = false
     )
 
     // 所有实例状态初始化完成后才启动异步观察；回调可在构造线程返回前到达。

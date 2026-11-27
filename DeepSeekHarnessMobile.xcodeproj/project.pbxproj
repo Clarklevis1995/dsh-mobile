@@ -44,6 +44,8 @@
 		840D7EE19AE943D1B34629D5 /* ShareExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 77884A70AB3E42DC8B152318 /* ShareExtension.appex */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		8891D9FBE23CCC096061416E /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A37B43613D712F252BA91D7 /* RootView.swift */; };
 		991D4FD90B81F84A0B8B79AD /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12863E736F832D8F502B94A0 /* Theme.swift */; };
+		A0D5A1000000000000000001 /* GenuiBlockView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0D5A1000000000000000002 /* GenuiBlockView.swift */; };
+		A0D5A1000000000000000003 /* genui in Resources */ = {isa = PBXBuildFile; fileRef = A0D5A1000000000000000004 /* genui */; };
 		A0C0FFEE0000000000000001 /* ConversationViewport.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0C0FFEE0000000000000002 /* ConversationViewport.swift */; };
 		A0C0FFEE0000000000000003 /* ConversationTimeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0C0FFEE0000000000000004 /* ConversationTimeline.swift */; };
 		A0C1234567890ABCDE0000001 /* WorkspaceChangesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0C1234567890ABCDE0000002 /* WorkspaceChangesView.swift */; };
@@ -226,6 +228,8 @@
 		8B77DEC008C0209D814CD7BE /* VoiceRipplePanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceRipplePanel.swift; sourceTree = "<group>"; };
 		94588D6D6FA34422B97262F3 /* ShareExtension/ShareViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareExtension/ShareViewController.swift; sourceTree = SOURCE_ROOT; };
 		954FCEA4A6E71F3D1A22BB53 /* GatewayModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GatewayModels.swift; sourceTree = "<group>"; };
+		A0D5A1000000000000000002 /* GenuiBlockView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GenuiBlockView.swift; sourceTree = "<group>"; };
+		A0D5A1000000000000000004 /* genui */ = {isa = PBXFileReference; lastKnownFileType = folder; path = shared/src/commonMain/resources/genui; sourceTree = SOURCE_ROOT; };
 		A0C0FFEE0000000000000002 /* ConversationViewport.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ConversationViewport.swift; sourceTree = "<group>"; };
 		A0C0FFEE0000000000000004 /* ConversationTimeline.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ConversationTimeline.swift; sourceTree = "<group>"; };
 		A0C1234567890ABCDE0000002 /* WorkspaceChangesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceChangesView.swift; sourceTree = "<group>"; };
@@ -483,6 +487,7 @@
 				B0C0FFEE0000000000000005 /* Shaders */,
 				C0FFC63B1CD5F1F40418350B /* Views */,
 				7CECE0900CF815A6EB3A938D /* Resources */,
+				A0D5A1000000000000000004 /* genui */,
 				F1A000000000000000000020 /* LiveActivity */,
 			);
 			path = DeepSeekHarnessMobile;
@@ -555,6 +560,7 @@
 				FCF581253EBCFEB43865AB51 /* Glass.swift */,
 				AF17C0000000000000000002 /* FileTypeIcon.swift */,
 				AF19C0000000000000000002 /* WorkspaceLoadingLogo.swift */,
+				A0D5A1000000000000000002 /* GenuiBlockView.swift */,
 				A0C0FFEE0000000000000002 /* ConversationViewport.swift */,
 				B0C0FFEE0000000000000002 /* HarnessAnimatedBackground.swift */,
 			);
@@ -829,6 +835,7 @@
 				A0C240000000000000000007 /* Design/review-fonts/jetbrainsmono-OFL.txt in Resources */,
 				AB0170000000000000000001 /* ../../AppRelease/release-info.json in Resources */,
 				AB0170000000000000000002 /* ../../AppRelease/release-notes.md in Resources */,
+				A0D5A1000000000000000003 /* genui in Resources */,
 				A1A0C0000000000000000001 /* LaunchScreen.storyboard in Resources */,
 				6FED6D958ABD07A258CC53F0 /* Assets.xcassets in Resources */,
 				CA11E000000000000000000B /* Localizable.xcstrings in Resources */,
@@ -1014,6 +1021,7 @@
 				E20191A4C7B1C0A8FF57CAC1 /* Glass.swift in Sources */,
 				AF17C0000000000000000001 /* FileTypeIcon.swift in Sources */,
 				AF19C0000000000000000001 /* WorkspaceLoadingLogo.swift in Sources */,
+				A0D5A1000000000000000001 /* GenuiBlockView.swift in Sources */,
 				A0C0FFEE0000000000000001 /* ConversationViewport.swift in Sources */,
 				B0C0FFEE0000000000000001 /* HarnessAnimatedBackground.swift in Sources */,
 				CF225000000000000000001 /* MarkdownTableCard.swift in Sources */,

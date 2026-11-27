@@ -5,6 +5,7 @@ import com.clarklevis.dsh.shared.cache.ChatCacheRestoreSkipReason
 import com.clarklevis.dsh.shared.cache.SharedChatHistoryCache
 import com.clarklevis.dsh.shared.facade.SharedApprovalEffect
 import com.clarklevis.dsh.shared.facade.SharedMobileSnapshot
+import com.clarklevis.dsh.shared.projection.GenuiActionEffect
 import com.clarklevis.dsh.shared.projection.TrajectoryNode
 import com.clarklevis.dsh.shared.protocol.GatewayFrame
 import java.util.concurrent.ConcurrentHashMap
@@ -307,6 +308,14 @@ internal class AndroidProjectionActor(
         cacheWriteJobs.clear()
         projection.reset()
     }
+
+    suspend fun resolveGenuiAction(
+        intent: com.clarklevis.dsh.shared.projection.GenuiActionIntent
+    ): GenuiActionEffect? =
+        mutationLock.withLock {
+            flushPendingStreamingFrameLocked()
+            projection.resolveGenuiAction(intent)
+        }
 
     suspend fun submitApprovalDecision(
         rpcId: String,

@@ -15,6 +15,8 @@ struct ConversationItem: Identifiable, Sendable {
     let files: [PresentedFile]
     let knownFiles: [PresentedFile]
     let textParts: [GatewayTextPart]?
+    let segments: [ConversationSegment]?
+    let sourceEventId: String?
 
     init(
         id: String,
@@ -26,7 +28,9 @@ struct ConversationItem: Identifiable, Sendable {
         date: Date,
         files: [PresentedFile] = [],
         knownFiles: [PresentedFile] = [],
-        textParts: [GatewayTextPart]? = nil
+        textParts: [GatewayTextPart]? = nil,
+        segments: [ConversationSegment]? = nil,
+        sourceEventId: String? = nil
     ) {
         self.id = id
         self.kind = kind
@@ -37,10 +41,86 @@ struct ConversationItem: Identifiable, Sendable {
         self.files = files
         self.knownFiles = knownFiles
         self.textParts = textParts
+        self.segments = segments
+        self.sourceEventId = sourceEventId
         self.date = date
     }
 
 
+}
+
+enum GenuiSegmentState: String, Decodable, Hashable, Sendable {
+    case streaming = "STREAMING"
+    case ready = "READY"
+    case invalid = "INVALID"
+}
+
+struct GenuiSegment: Decodable, Hashable, Sendable {
+    let id: String
+    let rawJson: String
+    let state: GenuiSegmentState
+    let fallbackMarkdown: String
+    let fallbackStart: Int
+    let fallbackEnd: Int
+    let contentVersion: String
+    let interactive: Bool
+
+    private enum CodingKeys: String, CodingKey { case id, rawJson, state, fallbackMarkdown, fallbackStart, fallbackEnd, contentVersion, interactive }
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        rawJson = try container.decode(String.self, forKey: .rawJson)
+        state = try container.decode(GenuiSegmentState.self, forKey: .state)
+        fallbackMarkdown = try container.decodeIfPresent(String.self, forKey: .fallbackMarkdown) ?? ""
+        fallbackStart = try container.decodeIfPresent(Int.self, forKey: .fallbackStart) ?? 0
+        fallbackEnd = try container.decodeIfPresent(Int.self, forKey: .fallbackEnd) ?? 0
+        contentVersion = try container.decodeIfPresent(String.self, forKey: .contentVersion) ?? ""
+        interactive = try container.decodeIfPresent(Bool.self, forKey: .interactive) ?? false
+        guard !id.isEmpty,
+              id.utf16.count <= 512,
+              rawJson.utf16.count <= 512_000,
+              fallbackMarkdown.utf16.count <= 32_768,
+              fallbackStart >= 0,
+              fallbackEnd >= fallbackStart,
+              (!fallbackMarkdown.isEmpty || fallbackEnd > fallbackStart),
+              contentVersion.utf16.count <= 64,
+              (state == .ready
+                ? !rawJson.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && contentVersion.utf16.count == 64
+                : rawJson.isEmpty && contentVersion.isEmpty && !interactive) else {
+            throw DecodingError.dataCorruptedError(forKey: .id, in: container, debugDescription: "Invalid GenUI segment bounds")
+        }
+    }
+
+    func resolvedFallbackMarkdown(in source: String) -> String {
+        if !fallbackMarkdown.isEmpty { return fallbackMarkdown }
+        let utf16 = source.utf16
+        guard fallbackStart >= 0, fallbackEnd >= fallbackStart, fallbackEnd <= utf16.count else {
+            return fallbackMarkdown
+        }
+        let start = utf16.index(utf16.startIndex, offsetBy: fallbackStart)
+        let end = utf16.index(utf16.startIndex, offsetBy: fallbackEnd)
+        return String(source[start..<end])
+    }
+}
+
+enum ConversationSegment: Decodable, Hashable, Sendable {
+    case markdown(String)
+    case genui(GenuiSegment)
+
+    private enum CodingKeys: String, CodingKey { case type, text }
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        switch try container.decode(String.self, forKey: .type) {
+        case "markdown":
+            self = .markdown(try container.decode(String.self, forKey: .text))
+        case "genui":
+            self = .genui(try GenuiSegment(from: decoder))
+        default:
+            throw DecodingError.dataCorruptedError(forKey: .type, in: container, debugDescription: "Unknown conversation segment")
+        }
+    }
 }
 
 /// A session-scoped presentation channel. It is deliberately not an

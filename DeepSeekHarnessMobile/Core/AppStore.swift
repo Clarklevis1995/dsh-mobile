@@ -854,9 +854,11 @@ final class AppStore: ObservableObject {
     @Published private(set) var queueState = DeepSeekHarnessShared.SharedQueueSnapshot(queues: [:], pendingItemId: nil, lastError: nil)
     @Published private(set) var queueRevision = 0
     @Published private(set) var messageSubmissionPending = false
-    private var messageSubmissionRequestID: String?
+    @Published private(set) var messageSubmissionRequestID: String?
     private var messageSubmissionSessionID: String?
+    private var messageSubmissionFromComposer = false
     @Published private(set) var messageAcceptedRevision = 0
+    @Published private(set) var messageAcceptedRequestID: String?
     private var messageSubmissionTimeout: Task<Void, Never>?
     @Published private(set) var supportsQueueControl = false
     private var queueActionTimeout: Task<Void, Never>?
@@ -3211,11 +3213,67 @@ final class AppStore: ObservableObject {
     }
     @discardableResult
     func send(_ text: String, images: [GatewayOutgoingImage] = [], mode: String = "queue") -> Bool {
+        submitMessage(text: text, images: images, mode: mode, includeComposerAttachments: true, fromComposer: true)
+    }
+
+    @Published var genuiDetail: GenuiDetail?
+
+    func handleGenuiAction(
+        blockID: String,
+        contentVersion: String,
+        actionJSON: String,
+        sourceSessionID: String,
+        isSearchContext: Bool = false
+    ) {
+        guard isSearchContext == isShowingSearchContext else { return }
+        let projector = isSearchContext ? searchContextProjector : kmpConversationStore
+        guard let effect = projector?.dispatchGenuiAction(
+            sessionID: sourceSessionID,
+            activeSessionID: selectedSessionId,
+            blockID: blockID,
+            contentVersion: contentVersion,
+            actionJSON: actionJSON,
+            isSearchContext: isSearchContext
+        ), effect.contentVersion == contentVersion else { return }
+        switch effect.type {
+        case .copyText:
+            let text = effect.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard !text.isEmpty else { return }
+            UIPasteboard.general.string = text
+        case .expandDetails:
+            let text = effect.details?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard !text.isEmpty else { return }
+            genuiDetail = GenuiDetail(text: text)
+        case .sendMessage:
+            guard !isShowingSearchContext,
+                  sourceSessionID == selectedSessionId,
+                  let text = effect.text, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+            _ = submitMessage(
+                text: text,
+                images: [],
+                mode: "queue",
+                includeComposerAttachments: false,
+                allowCommands: false,
+                clearsSearchContext: false,
+                fromComposer: false
+            )
+        }
+    }
+
+    private func submitMessage(
+        text: String,
+        images: [GatewayOutgoingImage],
+        mode: String,
+        includeComposerAttachments: Bool,
+        allowCommands: Bool = true,
+        clearsSearchContext: Bool = true,
+        fromComposer: Bool = true
+    ) -> Bool {
         guard !isChangingNewConversationWorkspace else { return false }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        let hasFiles = !fileUploads.drafts.isEmpty
+        let hasFiles = includeComposerAttachments && !fileUploads.drafts.isEmpty
         guard !trimmed.isEmpty || !images.isEmpty || hasFiles else { return false }
-        guard !fileUploads.preparing, !hasFiles || (fileUploads.sessionID == selectedSessionId && fileUploads.canSend && !isViewingTeamMember) else {
+        guard !includeComposerAttachments || !fileUploads.preparing, !hasFiles || (fileUploads.sessionID == selectedSessionId && fileUploads.canSend && !isViewingTeamMember) else {
             lastError = String(localized: "请等待附件上传完成，失败的附件可重试或移除")
             return false
         }
@@ -3227,8 +3285,8 @@ final class AppStore: ObservableObject {
         }
 
         guard !sessionAgentPreset.blocksSending, !teamMode.pending else { return false }
-        if isShowingSearchContext { clearSearchContext(); conversationSearchTarget = nil }
-        if !isViewingTeamMember, let command = kmpSlashCommandStore.commandExecutionForInput(text: trimmed) {
+        if clearsSearchContext, isShowingSearchContext { clearSearchContext(); conversationSearchTarget = nil }
+        if allowCommands, !isViewingTeamMember, let command = kmpSlashCommandStore.commandExecutionForInput(text: trimmed) {
             guard !hasFiles else { lastError = String(localized: "斜杠命令不支持文件，请使用普通消息发送"); return false }
             guard images.isEmpty || command.allowsImages else {
                 lastError = String(localized: "此命令不支持图片")
@@ -3246,10 +3304,11 @@ final class AppStore: ObservableObject {
         newConversationWorkspace = newConversationWorkspaceStore.snapshot()
         applySessionAgentPresetTransition(sessionAgentPresetStore.beginMessage())
         messageSubmissionPending = true
+        messageSubmissionFromComposer = fromComposer
         messageSubmissionRequestID = hasFiles
             ? fileUploads.submission(text: trimmed, imageKey: images.map { $0.id.uuidString }.joined(separator: ",") + "|" + mode)
             : UUID().uuidString
-        submittedUploadIDs = fileUploads.drafts.map { $0.id }
+        submittedUploadIDs = includeComposerAttachments ? fileUploads.drafts.map { $0.id } : []
         messageSubmissionSessionID = selectedSessionId
         updateChatPrefetchState()
         messageSubmissionTimeout?.cancel()
@@ -3257,6 +3316,7 @@ final class AppStore: ObservableObject {
             do { try await Task.sleep(for: .seconds(20)) } catch { return }
             guard let self, self.messageSubmissionPending else { return }
             self.messageSubmissionPending = false
+            self.messageSubmissionFromComposer = false
             self.updateChatPrefetchState()
             self.applySessionAgentPresetTransition(self.sessionAgentPresetStore.requestFailed(
                 type: "message", sessionId: self.messageSubmissionSessionID, requestId: self.messageSubmissionRequestID, message: nil
@@ -3269,7 +3329,7 @@ final class AppStore: ObservableObject {
         gateway.sendMessage(
             text: trimmed,
             images: images,
-            receipts: fileUploads.receipts,
+            receipts: includeComposerAttachments ? fileUploads.receipts : [],
             sessionId: selectedSessionId,
             workspaceId: selectedSessionId == nil ? activeWorkspace?.id : nil,
             mode: mode,
@@ -3579,14 +3639,22 @@ final class AppStore: ObservableObject {
         let matchesSubmission = (frame.requestId == messageSubmissionRequestID || (submittedUploadIDs.isEmpty && frame.requestId == nil)) &&
             (messageSubmissionSessionID == nil || frame.sessionId == nil || frame.sessionId == messageSubmissionSessionID)
         if frame.kind == "sent" && messageSubmissionPending && matchesSubmission {
+            let fromComposer = messageSubmissionFromComposer
             messageSubmissionPending = false
+            messageSubmissionFromComposer = false
             messageSubmissionTimeout?.cancel()
-            fileUploads.accepted(submittedUploadIDs)
-            submittedUploadIDs = []
-            messageAcceptedRevision &+= 1
+            if fromComposer {
+                fileUploads.accepted(submittedUploadIDs)
+                submittedUploadIDs = []
+                messageAcceptedRequestID = messageSubmissionRequestID
+                messageAcceptedRevision &+= 1
+            } else {
+                submittedUploadIDs = []
+            }
         }
         if frame.kind == "error" && (frame.requestType == "message" || frame.requestType == nil) && messageSubmissionPending && matchesSubmission {
             messageSubmissionPending = false
+            messageSubmissionFromComposer = false
             messageSubmissionTimeout?.cancel()
             waitingForNewSession = false
             if frame.code == "session/attachment-invalid" { fileUploads.invalidReceipts() }
@@ -5428,6 +5496,7 @@ final class AppStore: ObservableObject {
         }
         messageSubmissionTimeout?.cancel()
         messageSubmissionPending = false
+        messageSubmissionFromComposer = false
         queueActionTimeout?.cancel()
         if queueState.pendingItemId != nil { queueState = queueStore.failPending(message: UiMessage(key: "queue.connectionLost", args: [])) }
         assistantStreamState.disconnect()
@@ -5459,6 +5528,7 @@ final class AppStore: ObservableObject {
             // 服务端可能已经执行，只是确认留在旧连接；切换承载不能自动重放写操作。
             messageSubmissionTimeout?.cancel()
             messageSubmissionPending = false
+            messageSubmissionFromComposer = false
             commandSubmissionPending = false
         }
         deferredSessionControlEffects.removeAll()

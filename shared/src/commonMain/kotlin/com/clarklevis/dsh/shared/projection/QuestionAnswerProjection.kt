@@ -10,6 +10,23 @@ internal class QuestionAnswerProjection {
     private val questionsByCall = mutableMapOf<Pair<String, String>, List<JsonValue>>()
     private val answeredCalls = mutableSetOf<Pair<String, String>>()
 
+    internal data class Snapshot(
+        val questionsByCall: Map<Pair<String, String>, List<JsonValue>>,
+        val answeredCalls: Set<Pair<String, String>>
+    )
+
+    internal fun snapshot(): Snapshot = Snapshot(
+        questionsByCall = questionsByCall.toMap(),
+        answeredCalls = answeredCalls.toSet()
+    )
+
+    internal fun restore(snapshot: Snapshot) {
+        questionsByCall.clear()
+        questionsByCall.putAll(snapshot.questionsByCall)
+        answeredCalls.clear()
+        answeredCalls.addAll(snapshot.answeredCalls)
+    }
+
     fun reset() {
         questionsByCall.clear()
         answeredCalls.clear()

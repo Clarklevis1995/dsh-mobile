@@ -56,7 +56,16 @@ data class ConversationItem(
     val files: List<PresentedFile> = emptyList(),
     val knownFiles: List<PresentedFile> = emptyList(),
     val textParts: List<com.clarklevis.dsh.shared.protocol.GatewayTextPart>? = null,
-    val requestId: String? = null
+    val requestId: String? = null,
+    val segments: List<ConversationSegment>? = null,
+    val sourceEventId: String? = null
+)
+
+/** 单个分段的变化；稳定分段不会出现在高频 token patch 中。 */
+@Serializable
+data class ConversationSegmentChange(
+    val index: Int,
+    val segment: ConversationSegment
 )
 
 /** 高频 token 流只发送有序操作，不重复发送已经累计的完整消息文本。 */
@@ -66,7 +75,9 @@ data class ConversationProjectionOperation(
     val item: ConversationItem? = null,
     val itemId: String? = null,
     val delta: String? = null,
-    val epochSeconds: Double? = null
+    val epochSeconds: Double? = null,
+    val segments: List<ConversationSegment>? = null,
+    val segmentChanges: List<ConversationSegmentChange>? = null
 )
 
 class ConversationProjector(
@@ -88,6 +99,81 @@ class ConversationProjector(
     private val steeringMessages = linkedMapOf<String, SessionEvent>()
     private val committedUserMessageIds = mutableSetOf<String>()
     private val questionAnswers = QuestionAnswerProjection()
+
+    internal data class Snapshot(
+        val items: List<ConversationItem>,
+        val filesByTurn: Map<Int, LinkedHashMap<String, PresentedFile>>,
+        val presentedSequences: Set<Int>,
+        val toolImagesByCall: Map<String, Set<String>>,
+        val injectedImageCalls: Map<String, Set<String>>,
+        val imageWindowBySession: Map<String, Int>,
+        val streamIndexes: Map<String, Int>,
+        val finalizedKeys: Set<String>,
+        val commandItemIds: Map<String, String>,
+        val compactionCommandIds: Map<String, String>,
+        val attemptKeys: Map<String, String>,
+        val retryKeys: Map<Int, String>,
+        val transientKeys: Set<String>,
+        val steeringMessages: LinkedHashMap<String, SessionEvent>,
+        val committedUserMessageIds: Set<String>,
+        val questionAnswers: QuestionAnswerProjection.Snapshot,
+        val lastSequence: Int
+    )
+
+    internal fun snapshot(): Snapshot = Snapshot(
+        items = mutableItems.toList(),
+        filesByTurn = filesByTurn.mapValues { LinkedHashMap(it.value) },
+        presentedSequences = presentedSequences.toSet(),
+        toolImagesByCall = toolImagesByCall.mapValues { it.value.toSet() },
+        injectedImageCalls = injectedImageCalls.toMap(),
+        imageWindowBySession = imageWindowBySession.toMap(),
+        streamIndexes = streamIndexes.toMap(),
+        finalizedKeys = finalizedKeys.toSet(),
+        commandItemIds = commandItemIds.toMap(),
+        compactionCommandIds = compactionCommandIds.toMap(),
+        attemptKeys = attemptKeys.toMap(),
+        retryKeys = retryKeys.toMap(),
+        transientKeys = transientKeys.toSet(),
+        steeringMessages = LinkedHashMap(steeringMessages),
+        committedUserMessageIds = committedUserMessageIds.toSet(),
+        questionAnswers = questionAnswers.snapshot(),
+        lastSequence = lastSequence
+    )
+
+    internal fun restore(snapshot: Snapshot) {
+        mutableItems.clear()
+        mutableItems.addAll(snapshot.items)
+        filesByTurn.clear()
+        snapshot.filesByTurn.forEach { (turn, files) -> filesByTurn[turn] = LinkedHashMap(files) }
+        presentedSequences.clear()
+        presentedSequences.addAll(snapshot.presentedSequences)
+        toolImagesByCall.clear()
+        snapshot.toolImagesByCall.forEach { (key, value) -> toolImagesByCall[key] = value.toMutableSet() }
+        injectedImageCalls.clear()
+        injectedImageCalls.putAll(snapshot.injectedImageCalls)
+        imageWindowBySession.clear()
+        imageWindowBySession.putAll(snapshot.imageWindowBySession)
+        streamIndexes.clear()
+        streamIndexes.putAll(snapshot.streamIndexes)
+        finalizedKeys.clear()
+        finalizedKeys.addAll(snapshot.finalizedKeys)
+        commandItemIds.clear()
+        commandItemIds.putAll(snapshot.commandItemIds)
+        compactionCommandIds.clear()
+        compactionCommandIds.putAll(snapshot.compactionCommandIds)
+        attemptKeys.clear()
+        attemptKeys.putAll(snapshot.attemptKeys)
+        retryKeys.clear()
+        retryKeys.putAll(snapshot.retryKeys)
+        transientKeys.clear()
+        transientKeys.addAll(snapshot.transientKeys)
+        steeringMessages.clear()
+        steeringMessages.putAll(snapshot.steeringMessages)
+        committedUserMessageIds.clear()
+        committedUserMessageIds.addAll(snapshot.committedUserMessageIds)
+        questionAnswers.restore(snapshot.questionAnswers)
+        lastSequence = snapshot.lastSequence
+    }
 
     val items: List<ConversationItem> get() = mutableItems.toList()
     val hasAssistantChunks: Boolean get() = transientKeys.isNotEmpty()
@@ -129,7 +215,7 @@ class ConversationProjector(
             val start = operations.size
             fold(record, operations)
             val turn = record.event.turn
-            if (turn != null) {
+            if (turn != null && record.event.type != "user/message") {
                 val affectedIds = operations.drop(start).mapNotNull { it.item?.takeIf { item ->
                     item.kind == ConversationItemKind.ASSISTANT
                 }?.id }.toSet()
@@ -151,35 +237,150 @@ class ConversationProjector(
         return operations
     }
 
-    /** 独立流只改变展示行，绝不推进 lastSequence。 */
-    fun foldAssistantChunks(attemptId: String, chunks: List<AssistantChunk>): List<ConversationProjectionOperation> {
+    internal data class FastChunkMutation(
+        val operations: List<ConversationProjectionOperation>,
+        val itemIndex: Int,
+        val previousItem: ConversationItem,
+        val previousLastSequence: Int
+    )
+
+    /**
+     * O(1) fast path for appending a single streaming chunk to an already-open stream row.
+     * Avoids copying the full conversation history on every token while preserving exact rollback
+     * semantics if downstream patch validation rejects the candidate patch.
+     */
+    internal fun foldSingleStreamChunkFast(record: SessionEvent): FastChunkMutation? {
+        val event = record.event
+        if (event.type != "assistant/chunk") return null
+        val (streamKey, kind, delta) = when (event.chunkType) {
+            "text-delta" -> {
+                val k = assistantStreamKey(record)
+                if (k in finalizedKeys) return null
+                Triple(k, ConversationItemKind.ASSISTANT, event.text.orEmpty())
+            }
+            "reasoning-delta" -> {
+                val k = reasoningStreamKey(record)
+                if (k in finalizedKeys) return null
+                Triple(k, ConversationItemKind.REASONING, event.text.orEmpty())
+            }
+            "tool-call-delta" -> {
+                val turnStepKey = "${event.turn ?: -1}-${event.step ?: -1}"
+                if (turnStepKey in finalizedKeys) return null
+                val toolKey = event.tool?.id ?: turnStepKey
+                val name = event.tool?.name ?: labels.assemblingTool
+                val k = if (name.equals("run_code", ignoreCase = true)) ConversationItemKind.JSON_TOOL else ConversationItemKind.TOOL
+                Triple("tool-$toolKey", k, event.tool?.argumentsDelta.orEmpty())
+            }
+            else -> return null
+        }
+        val index = streamIndexes[streamKey] ?: return null
+        val previousItem = mutableItems[index]
+        if (kind == ConversationItemKind.ASSISTANT && event.turn != null && previousItem.turn != event.turn) {
+            return null
+        }
+        val previousLastSequence = lastSequence
         val operations = mutableListOf<ConversationProjectionOperation>()
-        chunks.forEach { entry ->
+        if (delta.isNotEmpty()) {
+            appendToExistingStream(index, kind, delta, normalizeEpoch(record.time), operations)
+        }
+        lastSequence = maxOf(lastSequence, record.seq)
+        return FastChunkMutation(operations, index, previousItem, previousLastSequence)
+    }
+
+    internal fun rollbackFastChunk(mutation: FastChunkMutation) {
+        mutableItems[mutation.itemIndex] = mutation.previousItem
+        lastSequence = mutation.previousLastSequence
+    }
+
+    internal data class FastTransientMutation(
+        val operations: List<ConversationProjectionOperation>,
+        val savedItems: List<Pair<Int, ConversationItem>>
+    )
+
+    internal fun foldExistingAssistantChunksFast(
+        attemptId: String,
+        chunks: List<AssistantChunk>
+    ): FastTransientMutation? {
+        if (chunks.isEmpty()) return FastTransientMutation(emptyList(), emptyList())
+        // Ensure every actionable chunk targets an already-open transient stream row.
+        val resolved = ArrayList<Triple<Int, ConversationItemKind, Pair<String, Double>>>(chunks.size)
+        for (entry in chunks) {
             fun field(name: String) = entry.chunk[name]?.jsonPrimitive?.contentOrNull
             val type = field("type")
             val kind = when (type) {
                 "text-delta" -> ConversationItemKind.ASSISTANT
                 "reasoning-delta" -> ConversationItemKind.REASONING
                 "tool-call-delta" -> ConversationItemKind.TOOL
-                else -> return@forEach
+                else -> continue
             }
             val key = "live-$attemptId-$type-${field("index") ?: field("id") ?: "0"}"
-            val title = when (kind) {
+            val index = streamIndexes[key] ?: return null
+            if (key !in transientKeys) return null
+            val delta = field(if (type == "tool-call-delta") "argumentsDelta" else "text").orEmpty()
+            val epoch = normalizeEpoch(entry.time)
+            require(epoch.isFinite()) { "assistant chunk time must be finite" }
+            resolved += Triple(index, kind, delta to epoch)
+        }
+        val savedByIndex = LinkedHashMap<Int, ConversationItem>()
+        val operations = mutableListOf<ConversationProjectionOperation>()
+        for ((index, kind, payload) in resolved) {
+            if (index !in savedByIndex) savedByIndex[index] = mutableItems[index]
+            if (payload.first.isNotEmpty()) {
+                appendToExistingStream(index, kind, payload.first, payload.second, operations)
+            }
+        }
+        return FastTransientMutation(operations, savedByIndex.entries.map { it.key to it.value })
+    }
+
+    internal fun rollbackFastTransient(mutation: FastTransientMutation) {
+        for ((index, item) in mutation.savedItems) {
+            mutableItems[index] = item
+        }
+    }
+
+    /** 独立流只改变展示行，绝不推进 lastSequence。 */
+    fun foldAssistantChunks(attemptId: String, chunks: List<AssistantChunk>): List<ConversationProjectionOperation> {
+        data class ParsedChunk(
+            val key: String,
+            val kind: ConversationItemKind,
+            val explicitName: String?,
+            val delta: String,
+            val epochSeconds: Double
+        )
+        // Parse and validate every chunk up front so a malformed trailing entry never mutates rows.
+        val parsed = ArrayList<ParsedChunk>(chunks.size)
+        for (entry in chunks) {
+            fun field(name: String) = entry.chunk[name]?.jsonPrimitive?.contentOrNull
+            val type = field("type")
+            val kind = when (type) {
+                "text-delta" -> ConversationItemKind.ASSISTANT
+                "reasoning-delta" -> ConversationItemKind.REASONING
+                "tool-call-delta" -> ConversationItemKind.TOOL
+                else -> continue
+            }
+            val key = "live-$attemptId-$type-${field("index") ?: field("id") ?: "0"}"
+            val explicitName = if (kind == ConversationItemKind.TOOL) field("name") else null
+            val delta = field(if (type == "tool-call-delta") "argumentsDelta" else "text").orEmpty()
+            val epoch = normalizeEpoch(entry.time)
+            require(epoch.isFinite()) { "assistant chunk time must be finite" }
+            parsed += ParsedChunk(key, kind, explicitName, delta, epoch)
+        }
+        val operations = mutableListOf<ConversationProjectionOperation>()
+        for (entry in parsed) {
+            val title = when (entry.kind) {
                 ConversationItemKind.ASSISTANT -> labels.streamingAssistant
                 ConversationItemKind.REASONING -> labels.streamingReasoning
-                else -> field("name") ?: streamIndexes[key]?.let { mutableItems[it].title } ?: labels.assemblingTool
+                else -> entry.explicitName ?: streamIndexes[entry.key]?.let { mutableItems[it].title } ?: labels.assemblingTool
             }
-            transientKeys += key
-            appendStream(key, key, kind, title,
-                field(if (type == "tool-call-delta") "argumentsDelta" else "text").orEmpty(),
-                normalizeEpoch(entry.time), operations)
+            transientKeys += entry.key
+            appendStream(entry.key, entry.key, entry.kind, title, entry.delta, entry.epochSeconds, operations)
         }
         return operations
     }
 
     fun clearAssistantChunks(): List<ConversationProjectionOperation> {
         val operations = mutableListOf<ConversationProjectionOperation>()
-        transientKeys.forEach { removeStream(it, operations) }
+        transientKeys.toList().forEach { removeStream(it, operations) }
         transientKeys.clear()
         return operations
     }
@@ -225,8 +426,13 @@ class ConversationProjector(
         val questionAnswer = questionAnswers.fold(record)
         when {
             // 延迟回答由问答气泡替代，避免再次作为 JSON 上下文展示。
-            questionAnswer?.replacesUserMessage == true -> Unit
+            questionAnswer?.replacesUserMessage == true -> {
+                finalizeOpenLegacyStreams(operations)
+                clearTurnlessFinalizedKeys()
+            }
             event.type == "user/message" && (event.source == null || event.source == "user") -> {
+                finalizeOpenLegacyStreams(operations)
+                clearTurnlessFinalizedKeys()
                 imageWindowBySession[record.sessionId] = record.seq
                 if (!event.text.isNullOrEmpty() || !event.images.isNullOrEmpty() || !event.files.isNullOrEmpty()) {
                     val messageId = event.raw?.get("id")?.stringValue
@@ -278,10 +484,14 @@ class ConversationProjector(
                     }
                 }
             }
-            event.type == "assistant/chunk" && event.chunkType == "text-delta" && key !in finalizedKeys ->
-                appendStream("stream-text-$key", "text-$key", ConversationItemKind.ASSISTANT, labels.streamingAssistant, event.text.orEmpty(), date, operations)
-            event.type == "assistant/chunk" && event.chunkType == "reasoning-delta" && key !in finalizedKeys ->
-                appendStream("stream-reason-$key", "reason-$key", ConversationItemKind.REASONING, labels.streamingReasoning, event.text.orEmpty(), date, operations)
+            event.type == "assistant/chunk" && event.chunkType == "text-delta" && assistantStreamKey(record) !in finalizedKeys ->
+                appendStream(assistantStreamKey(record), ConversationItemKind.ASSISTANT, labels.streamingAssistant, event.text.orEmpty(), date, operations) {
+                    uniqueStreamId(assistantStreamBaseId(record), record.seq)
+                }
+            event.type == "assistant/chunk" && event.chunkType == "reasoning-delta" && reasoningStreamKey(record) !in finalizedKeys ->
+                appendStream(reasoningStreamKey(record), ConversationItemKind.REASONING, labels.streamingReasoning, event.text.orEmpty(), date, operations) {
+                    uniqueStreamId(reasoningStreamBaseId(record), record.seq)
+                }
             event.type == "assistant/chunk" && event.chunkType == "tool-call-delta" && key !in finalizedKeys -> {
                 val toolKey = event.tool?.id ?: key
                 val name = event.tool?.name ?: labels.assemblingTool
@@ -327,7 +537,18 @@ class ConversationProjector(
                 val failed = reason in setOf("error", "failed")
                 val cancelled = reason in setOf("aborted", "cancelled", "canceled")
                 val interrupted = reason == "interrupted"
+                val streamTitle = when {
+                    cancelled -> labels.generationCancelled
+                    failed -> labels.generationFailed
+                    else -> labels.interrupted
+                }
                 if (failed || cancelled || interrupted) {
+                    finalizeOpenTurnStreams("text-", event.turn, operations) { old ->
+                        old.copy(title = streamTitle, isError = failed || interrupted)
+                    }
+                    finalizeOpenTurnStreams("reason-", event.turn, operations) { old ->
+                        old.copy(title = streamTitle, isError = failed || interrupted)
+                    }
                     attemptKeys.keys.filter { it.startsWith("${event.turn}-") }.toList().forEach { attempt ->
                         attemptKeys.remove(attempt)?.let { removeStream(it, operations) }
                     }
@@ -339,22 +560,82 @@ class ConversationProjector(
                                 title = old.title.replace(labels.modelRetrying, labels.modelRetried)), operations)
                         }
                     }
-                    val title = when {
-                        cancelled -> labels.generationCancelled
-                        failed -> labels.generationFailed
-                        else -> labels.interrupted
-                    }
+                    val title = streamTitle
                     val details = event.reasonDetails ?: event.raw?.get("reason")
                     insert(ConversationItem(eventId(record), ConversationItemKind.SYSTEM, title,
                         failureText(details?.get("error") ?: details?.get("failure")) ?: event.error.orEmpty(),
                         isError = failed || interrupted, epochSeconds = date), operations)
                 } else {
+                    finalizeOpenTurnStreams("text-", event.turn, operations) { old ->
+                        old.copy(title = labels.finalAssistant)
+                    }
+                    finalizeOpenTurnStreams("reason-", event.turn, operations) { old ->
+                        old.copy(title = labels.finalReasoning)
+                    }
                     retryKeys.remove(event.turn)
                 }
                 attemptKeys.keys.filter { it.startsWith("${event.turn}-") }.toList().forEach { attemptKeys.remove(it) }
             }
             event.type == "assistant/message" -> {
+                val exactAssistantKey = assistantStreamKey(record)
+                val exactReasoningKey = reasoningStreamKey(record)
+                val hasFinalReasoning = !event.reasoning.isNullOrEmpty()
+                val hasExplicitAssistantPayload = !event.text.isNullOrEmpty() || !event.images.isNullOrEmpty()
+                val rawAssistantKey = resolveStreamKeyForFinal("text-", exactAssistantKey, event.turn, event.step)
+                val rawReasoningKey = resolveStreamKeyForFinal("reason-", exactReasoningKey, event.turn, event.step)
+                val rawAssistantParsed = if (rawAssistantKey in streamIndexes) parseStreamKey("text-", rawAssistantKey) else null
+                val rawReasoningParsed = if (rawReasoningKey in streamIndexes) parseStreamKey("reason-", rawReasoningKey) else null
+                val rawAssistantTurn = streamIndexes[rawAssistantKey]?.let { rawAssistantParsed?.first ?: mutableItems[it].turn }
+                val rawAssistantStep = rawAssistantParsed?.second
+                val rawReasoningTurn = streamIndexes[rawReasoningKey]?.let { rawReasoningParsed?.first ?: mutableItems[it].turn }
+                val rawReasoningStep = rawReasoningParsed?.second
+                val pairTurnConflict = rawAssistantTurn != null && rawReasoningTurn != null && rawAssistantTurn != rawReasoningTurn
+                val pairStepConflict = rawAssistantStep != null && rawReasoningStep != null && rawAssistantStep != rawReasoningStep
+                val resolvedTurn = when {
+                    event.turn != null -> event.turn
+                    hasExplicitAssistantPayload && !hasFinalReasoning -> rawAssistantTurn
+                    hasFinalReasoning && !hasExplicitAssistantPayload -> rawReasoningTurn
+                    pairTurnConflict || pairStepConflict -> null
+                    else -> rawAssistantTurn ?: rawReasoningTurn
+                }
+                val resolvedStep = when {
+                    event.step != null -> event.step
+                    hasExplicitAssistantPayload && !hasFinalReasoning -> rawAssistantStep
+                    hasFinalReasoning && !hasExplicitAssistantPayload -> rawReasoningStep
+                    pairTurnConflict || pairStepConflict -> null
+                    else -> rawAssistantStep ?: rawReasoningStep
+                }
+                val assistantKey = when {
+                    event.turn != null && event.step != null -> rawAssistantKey
+                    (rawAssistantTurn != null && resolvedTurn != rawAssistantTurn) ||
+                        (rawAssistantStep != null && resolvedStep != rawAssistantStep) -> exactAssistantKey
+                    else -> resolveStreamKeyForFinal(
+                        "text-",
+                        streamKey("text-", resolvedTurn, resolvedStep),
+                        resolvedTurn,
+                        resolvedStep
+                    )
+                }
+                val reasoningKey = when {
+                    event.turn != null && event.step != null -> rawReasoningKey
+                    (rawReasoningTurn != null && resolvedTurn != rawReasoningTurn) ||
+                        (rawReasoningStep != null && resolvedStep != rawReasoningStep) -> exactReasoningKey
+                    else -> resolveStreamKeyForFinal(
+                        "reason-",
+                        streamKey("reason-", resolvedTurn, resolvedStep),
+                        resolvedTurn,
+                        resolvedStep
+                    )
+                }
                 finalizedKeys += key
+                finalizedKeys += exactAssistantKey
+                finalizedKeys += exactReasoningKey
+                if (assistantKey in streamIndexes || parseStreamKey("text-", assistantKey)?.first != null) {
+                    finalizedKeys += assistantKey
+                }
+                if (reasoningKey in streamIndexes || parseStreamKey("reason-", reasoningKey)?.first != null) {
+                    finalizedKeys += reasoningKey
+                }
                 val finalReasoning = event.reasoning?.takeIf(String::isNotEmpty)?.let { reasoning ->
                     ConversationItem(
                         "${eventId(record)}-reason",
@@ -365,7 +646,10 @@ class ConversationProjector(
                         epochSeconds = date
                     )
                 }
-                val finalAssistant = if (!event.text.isNullOrEmpty() || !event.images.isNullOrEmpty() || !filesByTurn[event.turn].isNullOrEmpty()) {
+                val existingAssistantIndex = streamIndexes[assistantKey]
+                val existingAssistant = existingAssistantIndex?.let { mutableItems[it] }
+                val effectiveTurn = event.turn ?: existingAssistant?.turn
+                val finalAssistant = if (!event.text.isNullOrEmpty() || !event.images.isNullOrEmpty() || !filesByTurn[effectiveTurn].isNullOrEmpty()) {
                     ConversationItem(
                         eventId(record),
                         ConversationItemKind.ASSISTANT,
@@ -373,28 +657,34 @@ class ConversationProjector(
                         event.text.orEmpty(),
                         event.images.orEmpty(),
                         isError = event.interrupted == true,
-                        epochSeconds = date
+                        epochSeconds = date,
+                        turn = effectiveTurn,
+                        files = existingAssistant?.files.orEmpty(),
+                        knownFiles = existingAssistant?.knownFiles.orEmpty()
                     )
                 } else {
                     null
                 }
 
-                if (finalReasoning != null && streamIndexes["reason-$key"] == null) {
-                    // A final-only reasoning payload must still precede the
-                    // answer. Since insert operations append, rebuild this
-                    // uncommon pair in order instead of leaving reasoning
-                    // below an already-streamed answer.
-                    removeStream("text-$key", operations)
-                    insert(finalReasoning, operations)
-                    finalAssistant?.let { insert(it, operations) }
+                if (finalReasoning != null && streamIndexes[reasoningKey] == null) {
+                    if (existingAssistantIndex != null && finalAssistant != null) {
+                        // Insert final-only reasoning directly before the streamed answer,
+                        // then finalize the answer in place so its id, turn, and deliverables stay intact.
+                        insertBefore(existingAssistantIndex, finalReasoning, operations, isFinal = true)
+                        finalizeStream(assistantKey, finalAssistant, operations)
+                    } else {
+                        removeStream(assistantKey, operations)
+                        insert(finalReasoning, operations, isFinal = true)
+                        finalAssistant?.let { insert(it, operations, isFinal = true) }
+                    }
                 } else {
                     // Keep a streamed response's identity through finalization.
                     // Platform renderers own their parser/source by item id; a
                     // remove+insert here tears down that source before its final
                     // buffered snapshot can be rendered. Replacing in place also
                     // avoids a structural list update at the end of every reply.
-                    finalizeStream("reason-$key", finalReasoning, operations)
-                    finalizeStream("text-$key", finalAssistant, operations)
+                    finalizeStream(reasoningKey, finalReasoning, operations)
+                    finalizeStream(assistantKey, finalAssistant, operations)
                 }
             }
             event.type == "deliverables/presented" && event.turn != null && presentedSequences.add(record.seq) -> {
@@ -651,11 +941,31 @@ class ConversationProjector(
 
     private fun insert(
         item: ConversationItem,
-        operations: MutableList<ConversationProjectionOperation>
+        operations: MutableList<ConversationProjectionOperation>,
+        isFinal: Boolean = false
     ) {
-        mutableItems += item
-        operations += ConversationProjectionOperation(kind = "insert", item = item)
+        val projected = projectSegments(item, isFinal)
+        mutableItems += projected
+        operations += ConversationProjectionOperation(kind = "insert", item = projected)
     }
+
+    private fun insertBefore(
+        index: Int,
+        item: ConversationItem,
+        operations: MutableList<ConversationProjectionOperation>,
+        isFinal: Boolean = false
+    ) {
+        val anchorId = mutableItems[index].id
+        val projected = projectSegments(item, isFinal)
+        mutableItems.add(index, projected)
+        streamIndexes.entries.forEach { entry -> if (entry.value >= index) entry.setValue(entry.value + 1) }
+        operations += ConversationProjectionOperation(kind = "insert-before", item = projected, itemId = anchorId)
+    }
+
+    private fun projectSegments(item: ConversationItem, isFinal: Boolean = false): ConversationItem =
+        if (item.kind == ConversationItemKind.ASSISTANT) {
+            GenuiBlockParser.parse(item.id, item.text, isFinal = isFinal)?.let { item.copy(segments = it) } ?: item
+        } else item
 
     private fun appendStream(
         id: String,
@@ -665,22 +975,63 @@ class ConversationProjector(
         delta: String,
         date: Double,
         operations: MutableList<ConversationProjectionOperation>
+    ) = appendStream(key, kind, title, delta, date, operations) { id }
+
+    private inline fun appendStream(
+        key: String,
+        kind: ConversationItemKind,
+        title: String,
+        delta: String,
+        date: Double,
+        operations: MutableList<ConversationProjectionOperation>,
+        idProvider: () -> String
     ) {
         if (delta.isEmpty()) return
         val index = streamIndexes[key]
         if (index != null) {
-            val old = mutableItems[index]
-            mutableItems[index] = old.copy(text = old.text + delta, epochSeconds = date)
-            operations += ConversationProjectionOperation(
-                kind = "append-text",
-                itemId = old.id,
-                delta = delta,
-                epochSeconds = date
-            )
+            appendToExistingStream(index, kind, delta, date, operations)
         } else {
             streamIndexes[key] = mutableItems.size
-            insert(ConversationItem(id, kind, title, delta, epochSeconds = date), operations)
+            insert(ConversationItem(idProvider(), kind, title, delta, epochSeconds = date), operations)
         }
+    }
+
+    private fun appendToExistingStream(
+        index: Int,
+        kind: ConversationItemKind,
+        delta: String,
+        date: Double,
+        operations: MutableList<ConversationProjectionOperation>
+    ) {
+        val old = mutableItems[index]
+        val text = old.text + delta
+        val parsed = if (kind == ConversationItemKind.ASSISTANT) {
+            GenuiBlockParser.parseAppend(old.id, old.text, delta, old.segments)
+        } else null
+        if (old.segments != null && parsed == null) {
+            val updated = old.copy(text = text, epochSeconds = date, segments = null)
+            mutableItems[index] = updated
+            operations += ConversationProjectionOperation("replace", item = updated, itemId = old.id)
+            return
+        }
+        val markdownAppendOnly = old.segments != null && parsed != null &&
+            GenuiBlockParser.isMarkdownAppendOnly(old.segments, parsed, delta)
+        val sendFullSegments = (old.segments == null && parsed != null) ||
+            (old.segments != null && parsed != null && parsed.size < old.segments.size)
+        val segmentChanges = if (!sendFullSegments && old.segments != null && parsed != null && !markdownAppendOnly) {
+            GenuiBlockParser.changedSegments(old.segments, parsed)
+        } else null
+        val segments = parsed ?: old.segments
+        val updated = old.copy(text = text, epochSeconds = date, segments = segments)
+        mutableItems[index] = updated
+        operations += ConversationProjectionOperation(
+            kind = "append-text",
+            itemId = old.id,
+            delta = delta,
+            epochSeconds = date,
+            segments = if (sendFullSegments) parsed else null,
+            segmentChanges = segmentChanges?.takeIf { it.isNotEmpty() }
+        )
     }
 
     private fun removeStream(
@@ -688,9 +1039,87 @@ class ConversationProjector(
         operations: MutableList<ConversationProjectionOperation>
     ) {
         val index = streamIndexes.remove(key) ?: return
+        transientKeys.remove(key)
         val removed = mutableItems.removeAt(index)
         operations += ConversationProjectionOperation(kind = "remove", itemId = removed.id)
         streamIndexes.entries.forEach { entry -> if (entry.value > index) entry.setValue(entry.value - 1) }
+    }
+
+    /** Resolves exact key first, falling back only when there is a single unambiguous compatible open stream. */
+    private fun resolveStreamKeyForFinal(prefix: String, exactKey: String, turn: Int?, step: Int?): String {
+        if (exactKey in streamIndexes) return exactKey
+        val safeStep = step?.takeIf { it >= 0 }
+        val openStreams = streamIndexes.keys.mapNotNull { key ->
+            if (key in transientKeys) return@mapNotNull null
+            parseStreamKey(prefix, key)?.let { (candTurn, candStep) -> Triple(key, candTurn, candStep) }
+        }
+        fun stepCompatible(candStep: Int?): Boolean = safeStep == null || candStep == null || candStep == safeStep
+        if (turn != null) {
+            val sameTurn = openStreams.filter { it.second == turn }
+            val compatibleSameTurn = sameTurn.filter { stepCompatible(it.third) }
+            if (compatibleSameTurn.size == 1) return compatibleSameTurn.single().first
+            if (compatibleSameTurn.isEmpty()) {
+                val compatibleNoTurn = openStreams.filter { it.second == null && stepCompatible(it.third) }
+                if (compatibleNoTurn.size == 1) return compatibleNoTurn.single().first
+            }
+            return exactKey
+        }
+        val compatible = openStreams.filter { stepCompatible(it.third) }
+        return if (compatible.size == 1) compatible.single().first else exactKey
+    }
+
+    private inline fun finalizeOpenTurnStreams(
+        prefix: String,
+        turn: Int?,
+        operations: MutableList<ConversationProjectionOperation>,
+        transform: (ConversationItem) -> ConversationItem
+    ) {
+        val keysToFinalize = streamIndexes.keys.filter { key ->
+            key !in transientKeys && parseStreamKey(prefix, key)?.let { (candTurn, _) ->
+                candTurn == null || (turn != null && candTurn == turn)
+            } == true
+        }.toList()
+        keysToFinalize.forEach { streamKey ->
+            val index = streamIndexes[streamKey] ?: return@forEach
+            val old = mutableItems[index]
+            if (parseStreamKey(prefix, streamKey)?.first != null) finalizedKeys += streamKey
+            finalizeStream(streamKey, transform(old), operations)
+        }
+    }
+
+    /** Closes any unfinalized legacy assistant/reasoning streams from the previous user turn. */
+    private fun finalizeOpenLegacyStreams(operations: MutableList<ConversationProjectionOperation>) {
+        val reasonKeys = streamIndexes.keys.filter { it.startsWith("reason-") && it !in transientKeys }.toList()
+        reasonKeys.forEach { streamKey ->
+            val index = streamIndexes[streamKey] ?: return@forEach
+            val old = mutableItems[index]
+            if (parseStreamKey("reason-", streamKey)?.first != null) finalizedKeys += streamKey
+            finalizeStream(streamKey, old.copy(title = labels.finalReasoning), operations)
+        }
+        val textKeys = streamIndexes.keys.filter { it.startsWith("text-") && it !in transientKeys }.toList()
+        textKeys.forEach { streamKey ->
+            val index = streamIndexes[streamKey] ?: return@forEach
+            val old = mutableItems[index]
+            if (parseStreamKey("text-", streamKey)?.first != null) finalizedKeys += streamKey
+            finalizeStream(streamKey, old.copy(title = labels.finalAssistant), operations)
+        }
+    }
+
+    private fun clearTurnlessFinalizedKeys() {
+        finalizedKeys.removeAll { key ->
+            key.startsWith("-1-") ||
+                parseStreamKey("text-", key)?.let { it.first == null } == true ||
+                parseStreamKey("reason-", key)?.let { it.first == null } == true
+        }
+    }
+
+    private fun uniqueStreamId(baseId: String, seq: Int): String {
+        if (mutableItems.none { it.id == baseId }) return baseId
+        val withSeq = "$baseId-$seq"
+        if (mutableItems.none { it.id == withSeq }) return withSeq
+        var suffix = 2
+        while (mutableItems.any { it.id == "$withSeq-$suffix" }) suffix += 1
+        return "$withSeq-$suffix"
     }
 
     private fun finalizeStream(
@@ -700,7 +1129,7 @@ class ConversationProjector(
     ) {
         val index = streamIndexes.remove(key)
         if (index == null) {
-            finalItem?.let { insert(it, operations) }
+            finalItem?.let { insert(it, operations, isFinal = true) }
             return
         }
         if (finalItem == null) {
@@ -712,7 +1141,20 @@ class ConversationProjector(
             return
         }
 
-        val stableFinalItem = finalItem.copy(id = mutableItems[index].id)
+        val existing = mutableItems[index]
+        val existingId = existing.id
+        val alias = finalItem.id.takeIf { it != existingId }
+        val preserveAssistantFiles = finalItem.kind == ConversationItemKind.ASSISTANT
+        val stableFinalItem = projectSegments(
+            finalItem.copy(
+                id = existingId,
+                turn = finalItem.turn ?: existing.turn,
+                files = if (preserveAssistantFiles && finalItem.files.isEmpty()) existing.files else finalItem.files,
+                knownFiles = if (preserveAssistantFiles && finalItem.knownFiles.isEmpty()) existing.knownFiles else finalItem.knownFiles,
+                sourceEventId = alias ?: finalItem.sourceEventId
+            ),
+            isFinal = true
+        )
         mutableItems[index] = stableFinalItem
         operations += ConversationProjectionOperation(
             kind = "replace",
@@ -766,4 +1208,40 @@ private fun contextSourceName(event: GatewayEvent): String =
         ?: "Context"
 
 private fun eventId(record: SessionEvent): String = "${record.sessionId}-${record.seq}"
+private fun streamKey(prefix: String, turn: Int?, step: Int?): String {
+    val safeStep = step?.takeIf { it >= 0 }
+    return when {
+        turn != null -> "$prefix$turn-${safeStep ?: -1}"
+        safeStep != null -> "${prefix}unindexed-$safeStep"
+        else -> "${prefix}unindexed"
+    }
+}
+private fun parseStreamKey(prefix: String, key: String): Pair<Int?, Int?>? {
+    if (!key.startsWith(prefix)) return null
+    val rest = key.removePrefix(prefix)
+    if (rest == "unindexed") return null to null
+    if (rest.startsWith("unindexed-")) {
+        val step = rest.removePrefix("unindexed-").toIntOrNull()?.takeIf { it >= 0 } ?: return null
+        return null to step
+    }
+    val dash = rest.indexOf('-')
+    if (dash <= 0) return null
+    val turn = rest.substring(0, dash).toIntOrNull() ?: return null
+    val step = rest.substring(dash + 1).toIntOrNull()?.takeIf { it >= 0 }
+    return turn to step
+}
+private fun assistantStreamKey(record: SessionEvent): String =
+    streamKey("text-", record.event.turn, record.event.step)
+private fun reasoningStreamKey(record: SessionEvent): String =
+    streamKey("reason-", record.event.turn, record.event.step)
+private fun assistantStreamBaseId(record: SessionEvent): String = when {
+    record.event.turn != null -> "stream-text-${record.event.turn}-${record.event.step ?: -1}"
+    record.event.step != null -> "stream-text-unindexed-${record.event.step}-${record.seq}"
+    else -> "stream-text-unindexed-${record.seq}"
+}
+private fun reasoningStreamBaseId(record: SessionEvent): String = when {
+    record.event.turn != null -> "stream-reason-${record.event.turn}-${record.event.step ?: -1}"
+    record.event.step != null -> "stream-reason-unindexed-${record.event.step}-${record.seq}"
+    else -> "stream-reason-unindexed-${record.seq}"
+}
 private fun normalizeEpoch(value: Double): Double = if (value > 10_000_000_000) value / 1_000 else value

@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:; connect-src 'none'; worker-src blob:; child-src blob:; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>GenUI</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --dsw-alias-label-primary: #1c1c1e;
+      --dsw-alias-label-secondary: #636366;
+      --dsw-alias-label-tertiary: #8e8e93;
+      --dsw-alias-label-quaternary: #aeaeb2;
+      --dsw-alias-background-default: #ffffff;
+      --dsw-alias-background-neutral: #f2f2f7;
+      --dsw-alias-background-prominent: #e5e5ea;
+      --dsw-alias-border-default: rgba(60, 60, 67, 0.18);
+      --dsw-alias-border-prominent: rgba(60, 60, 67, 0.29);
+      --dsw-semantic-brand-default: #007aff;
+      --dsw-semantic-positive-default: #34c759;
+      --dsw-semantic-warning-default: #ff9500;
+      --dsw-semantic-negative-default: #ff3b30;
+      --genui-font-scale: 1;
+      --dsh-content-font-size: calc(17px * var(--genui-font-scale));
+    }
+    :root[data-theme="dark"] {
+      color-scheme: dark;
+      --dsw-alias-label-primary: #f5f5f7;
+      --dsw-alias-label-secondary: #aeaeb2;
+      --dsw-alias-label-tertiary: #8e8e93;
+      --dsw-alias-label-quaternary: #636366;
+      --dsw-alias-background-default: #000000;
+      --dsw-alias-background-neutral: #1c1c1e;
+      --dsw-alias-background-prominent: #2c2c2e;
+      --dsw-alias-border-default: rgba(235, 235, 245, 0.18);
+      --dsw-alias-border-prominent: rgba(235, 235, 245, 0.29);
+      --dsw-semantic-brand-default: #0a84ff;
+      --dsw-semantic-positive-default: #30d158;
+      --dsw-semantic-warning-default: #ff9f0a;
+      --dsw-semantic-negative-default: #ff453a;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      width: 100%;
+      min-height: 1px;
+      margin: 0;
+      padding: 0;
+      overflow-x: hidden;
+      background: transparent;
+      color: var(--dsw-alias-label-primary);
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", Roboto, sans-serif;
+      font-size: calc(14px * var(--genui-font-scale));
+      line-height: 1.45;
+      -webkit-text-size-adjust: 100%;
+    }
+    #genui-root {
+      width: 100%;
+      min-height: 1px;
+      overflow-x: clip;
+      border-radius: 16px;
+      isolation: isolate;
+    }
+    #genui-root[data-interactive="false"] {
+      pointer-events: none;
+      user-select: none;
+    }
+    #genui-root > *,
+    #genui-root [class*="_block"],
+    #genui-root [class*="_panel"] {
+      --dsl-g-font-stat: calc(34px * var(--genui-font-scale));
+      --dsl-g-font-stat-hero: calc(44px * var(--genui-font-scale));
+      --dsl-g-font-mega: calc(52px * var(--genui-font-scale));
+      --dsl-g-font-display: calc(28px * var(--genui-font-scale));
+      --dsl-g-font-h1: calc(24px * var(--genui-font-scale));
+      --dsl-g-font-h2: calc(19px * var(--genui-font-scale));
+      --dsl-g-font-h3: calc(16px * var(--genui-font-scale));
+      --dsl-g-font-body: calc(14.5px * var(--genui-font-scale));
+      --dsl-g-font-title: calc(13.5px * var(--genui-font-scale));
+      --dsl-g-font-meta: calc(12.5px * var(--genui-font-scale));
+      --dsl-g-font-data: calc(12px * var(--genui-font-scale));
+    }
+    #genui-root > * { max-width: 100%; }
+    img, video, canvas, svg { max-width: 100%; }
+  </style>
+</head>
+<body>
+  <main id="genui-root" aria-live="polite"></main>
+  <script src="genui-bridge.js"></script>
+  <script src="echarts-core.js"></script>
+  <script src="icons.js"></script>
+  <script src="standalone-runtime.js"></script>
+</body>
+</html>

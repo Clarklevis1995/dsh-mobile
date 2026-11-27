@@ -183,6 +183,134 @@ class AndroidSharedStateHolderTest {
     }
 
     @Test
+    fun genuiSubmissionPreservesComposerDraftAndAttachments() {
+        val holder = AndroidSharedStateHolder()
+        val image = AndroidPreparedImage(
+            GatewayOutgoingImage("image/png", "AQID", "draft.png"),
+            width = 1,
+            height = 1,
+            byteCount = 3
+        )
+        holder.messageDraft = "keep this draft"
+        holder.setPreparedImagesForTest(listOf(image))
+        val submission = AndroidSharedStateHolder.MessageSubmission(
+            generation = 0L,
+            sessionId = null,
+            draft = "Blue",
+            images = emptyList(),
+            preserveComposer = true
+        )
+
+        holder.applyMessageSendResultForTest(submission, sent = true)
+
+        assertEquals("keep this draft", holder.messageDraft)
+        assertEquals(listOf(image), holder.preparedImages)
+        assertEquals(0L, holder.successfulMessageSendCount)
+    }
+
+    @Test
+    fun genuiActionIntentValidatesSessionCardStateAndSearchContextEndToEnd() {
+        val projection = AndroidGatewayProjection()
+        projection.selectSession("session-a")
+        val spec = """{"items":[{"type":"choices","title":"Deploy","prompt":"Target?","mode":"multi","submit":"Go","action":"choose-target","items":[{"label":"Staging"},{"label":"Prod"}]}]}"""
+        val fence = "```dsh-ui\\n${spec.replace("\"", "\\\"")}\\n```"
+        val raw = """{"kind":"event","sessionId":"session-a","seq":1,"time":100,"event":{"type":"assistant/message","text":"$fence"}}"""
+        projection.acceptFrame(raw, GatewayWireDecoder.decode(raw), "session-a")
+
+        val block = projection.snapshot().conversation.single().segments!!
+            .filterIsInstance<com.clarklevis.dsh.shared.projection.GenuiSegment>()
+            .single()
+        val blockId = block.id
+        val contentVersion = block.contentVersion
+        val choicesAction = """{"version":1,"action":"choose-target","payload":{"type":"choices","question":"Target?","selected":["Staging","Prod"],"mode":"multi"}}"""
+
+        val valid = projection.resolveGenuiAction(
+            com.clarklevis.dsh.shared.projection.GenuiActionIntent(
+                sessionId = "session-a",
+                activeSessionId = "session-a",
+                blockId = blockId,
+                contentVersion = contentVersion,
+                actionJson = choicesAction,
+                isSearchContext = false
+            )
+        )
+        assertNotNull(valid)
+        assertEquals(com.clarklevis.dsh.shared.projection.GenuiActionType.SEND_MESSAGE, valid!!.type)
+        assertTrue(valid.text!!.contains("choose-target"))
+        assertTrue(valid.text!!.contains("Staging"))
+        assertTrue(valid.text!!.contains("Prod"))
+
+        assertNull(
+            projection.resolveGenuiAction(
+                com.clarklevis.dsh.shared.projection.GenuiActionIntent(
+                    sessionId = "session-a",
+                    activeSessionId = "session-b",
+                    blockId = blockId,
+                    contentVersion = contentVersion,
+                    actionJson = choicesAction,
+                    isSearchContext = false
+                )
+            )
+        )
+        assertNull(
+            projection.resolveGenuiAction(
+                com.clarklevis.dsh.shared.projection.GenuiActionIntent(
+                    sessionId = "session-a",
+                    activeSessionId = "session-a",
+                    blockId = "stale-block-id",
+                    contentVersion = contentVersion,
+                    actionJson = choicesAction,
+                    isSearchContext = false
+                )
+            )
+        )
+        assertNull(
+            projection.resolveGenuiAction(
+                com.clarklevis.dsh.shared.projection.GenuiActionIntent(
+                    sessionId = "session-a",
+                    activeSessionId = "session-a",
+                    blockId = blockId,
+                    contentVersion = contentVersion,
+                    actionJson = choicesAction,
+                    isSearchContext = true
+                )
+            )
+        )
+        projection.close()
+    }
+
+    @Test
+    fun genuiEffectIgnoresStaleSessionForExpandDetailsAndCopy() {
+        val holder = AndroidSharedStateHolder()
+        holder.loadFixture()
+        val activeSession = holder.snapshot.selectedSessionId!!
+
+        holder.handleGenuiAction(
+            com.clarklevis.dsh.shared.projection.GenuiActionEffect(
+                type = com.clarklevis.dsh.shared.projection.GenuiActionType.EXPAND_DETAILS,
+                sessionId = "other-session",
+                blockId = "other-session-1-genui-0",
+                contentVersion = "a".repeat(64),
+                details = "Should not open"
+            ),
+            sourceSessionId = "other-session"
+        )
+        assertEquals(null, holder.genuiDetails)
+
+        holder.handleGenuiAction(
+            com.clarklevis.dsh.shared.projection.GenuiActionEffect(
+                type = com.clarklevis.dsh.shared.projection.GenuiActionType.EXPAND_DETAILS,
+                sessionId = activeSession,
+                blockId = "$activeSession-1-genui-0",
+                contentVersion = "a".repeat(64),
+                details = "Active session details"
+            ),
+            sourceSessionId = activeSession
+        )
+        assertEquals("Active session details", holder.genuiDetails)
+    }
+
+    @Test
     fun acceptedSubmissionDoesNotClearOrResendInputEditedAfterClick() {
         val holder = AndroidSharedStateHolder()
         holder.loadFixture()

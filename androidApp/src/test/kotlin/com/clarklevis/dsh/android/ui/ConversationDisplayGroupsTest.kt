@@ -4,6 +4,9 @@ import com.clarklevis.dsh.android.localization.LocaleTestRule
 import org.junit.Rule
 import com.clarklevis.dsh.shared.projection.ConversationItem
 import com.clarklevis.dsh.shared.projection.ConversationItemKind
+import com.clarklevis.dsh.shared.projection.GenuiSegment
+import com.clarklevis.dsh.shared.projection.GenuiSegmentState
+import com.clarklevis.dsh.shared.projection.MarkdownSegment
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -37,6 +40,62 @@ class ConversationDisplayGroupsTest {
         assertEquals(4_601.0, separator.epochSeconds, 0.0)
         assertTrue(entries[entries.indexOf(separator) + 1] is ConversationDisplayEntry.Message)
         assertEquals(1, makeConversationTimelineEntries(entries).count { it.id == separator.id })
+    }
+
+    @Test
+    fun `shared genui segments keep stable rows and never reparse raw json`() {
+        val block = GenuiSegment(
+            id = "reply-genui-1",
+            rawJson = """{"format":"dsh-genui","version":1}""",
+            state = GenuiSegmentState.READY,
+            fallbackMarkdown = "```dsh-ui\n{}\n```"
+        )
+        val reply = item("reply", ConversationItemKind.ASSISTANT, text = "Before\n\n```dsh-ui\n{}\n```\n\nAfter")
+            .copy(segments = listOf(
+                MarkdownSegment("Before"),
+                block,
+                MarkdownSegment("After")
+            ))
+        val timeline = makeConversationTimelineEntries(
+            makeConversationDisplayEntries(listOf(reply)),
+            sourceSessionId = "session-a"
+        )
+
+        assertEquals(
+            listOf(
+                "assistant:reply:markdown:0",
+                block.id,
+                "assistant:reply:markdown:2",
+                "assistant:reply:footer"
+            ),
+            timeline.map { it.id }
+        )
+        val card = timeline[1] as ConversationTimelineEntry.AssistantGenui
+        assertSame(block, card.segment)
+        assertEquals("session-a", card.sourceSessionId)
+        assertEquals(listOf("Before", "After"), timeline.filterIsInstance<ConversationTimelineEntry.AssistantMarkdown>().map { it.markdown })
+        assertFalse(timeline.filterIsInstance<ConversationTimelineEntry.AssistantMarkdown>().any { block.rawJson in it.markdown })
+        val footer = timeline.last() as ConversationTimelineEntry.AssistantFooter
+        assertEquals(reply.text, footer.text)
+        assertEquals(reply.files, footer.files)
+    }
+
+    @Test
+    fun `genui presentation binds each card to its source session`() {
+        val block = GenuiSegment(
+            id = "reply-genui-0",
+            rawJson = "{}",
+            state = GenuiSegmentState.READY,
+            fallbackMarkdown = "```dsh-ui\n{}\n```"
+        )
+        val reply = item("reply", ConversationItemKind.ASSISTANT, text = block.fallbackMarkdown)
+            .copy(segments = listOf(block))
+
+        val first = prepareConversationPresentation(listOf(reply), running = false, sourceSessionId = "session-a")
+        val second = prepareConversationPresentation(listOf(reply), running = false, sourceSessionId = "session-b")
+        assertEquals("session-a", first.entries.filterIsInstance<ConversationTimelineEntry.AssistantGenui>().single().sourceSessionId)
+        assertEquals("session-b", second.entries.filterIsInstance<ConversationTimelineEntry.AssistantGenui>().single().sourceSessionId)
+        assertEquals("session-a", first.sourceSessionId)
     }
 
     @Test

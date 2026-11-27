@@ -6,6 +6,7 @@ import com.clarklevis.dsh.shared.cache.ChatCacheRestoreSkipReason
 import com.clarklevis.dsh.shared.facade.CachedHistoryWindow
 import com.clarklevis.dsh.shared.facade.SharedConversationBootstrap
 import com.clarklevis.dsh.shared.facade.SharedConversationPatch
+import com.clarklevis.dsh.shared.facade.SharedConversationPatchGuard
 import com.clarklevis.dsh.shared.facade.SharedConversationStore
 import com.clarklevis.dsh.shared.facade.SharedHistoryBootstrap
 import com.clarklevis.dsh.shared.facade.SharedHistoryEffect
@@ -18,6 +19,13 @@ import com.clarklevis.dsh.shared.facade.SharedMviEvent
 import com.clarklevis.dsh.shared.projection.ConversationItem
 import com.clarklevis.dsh.shared.projection.ConversationProjectionLabels
 import com.clarklevis.dsh.shared.projection.ConversationProjector
+import com.clarklevis.dsh.shared.projection.ConversationSegment
+import com.clarklevis.dsh.shared.projection.GenuiActionEffect
+import com.clarklevis.dsh.shared.projection.GenuiActionIntent
+import com.clarklevis.dsh.shared.projection.GenuiBlockParser
+import com.clarklevis.dsh.shared.projection.GenuiSegment
+import com.clarklevis.dsh.shared.projection.GenuiSegmentState
+import com.clarklevis.dsh.shared.projection.MarkdownSegment
 import com.clarklevis.dsh.shared.projection.TrajectoryNode
 import com.clarklevis.dsh.shared.projection.TrajectoryProjection
 import com.clarklevis.dsh.shared.protocol.GatewayFrame
@@ -53,7 +61,8 @@ internal class AndroidGatewayProjection(
         val sessionId: String,
         val targetSequence: Int,
         val window: CachedHistoryWindow,
-        val items: List<ConversationItem>
+        val items: List<ConversationItem>,
+        val store: SharedConversationStore
     )
     enum class SearchFragmentDisposition { REPLACED, EXPIRED }
     private var searchFragment: SearchFragment? = null
@@ -145,6 +154,16 @@ internal class AndroidGatewayProjection(
             selectedHistoryLoadedEventCount = fragment.window.events.size,
             selectedHistoryTotalEventCount = null
         )
+    }
+
+    fun resolveGenuiAction(intent: GenuiActionIntent): GenuiActionEffect? {
+        val activeFragment = searchFragment?.takeIf { it.sessionId == controlSnapshot.selectedSessionId }
+        if (intent.isSearchContext) {
+            val fragment = activeFragment?.takeIf { it.sessionId == intent.sessionId } ?: return null
+            return fragment.store.resolveGenuiAction(intent)
+        }
+        if (activeFragment != null || !conversationEnvelope.isOperational) return null
+        return conversationStore.resolveGenuiAction(intent)
     }
 
     private fun approvalArguments(request: GatewayPendingApprovalRequest): JsonValue? {
@@ -250,11 +269,15 @@ internal class AndroidGatewayProjection(
         window.validate(sessionId)
         if (window.events.none { it.seq == sequence } || !canPresentCachedSearchTarget(sessionId, sequence)) return false
         if (helloReceived && window.historyFormatVersion != helloHistoryFormat) return false
+        val labels = mobileConversationLabels()
+        val fragmentStore = SharedConversationStore(labels)
+        if (!fragmentStore.replaceTypedSession(sessionId, window.events).accepted) return false
         searchFragment = SearchFragment(
             sessionId,
             sequence,
             window,
-            ConversationProjector.make(window.events, mobileConversationLabels())
+            ConversationProjector.make(window.events, labels),
+            fragmentStore
         )
         return true
     }
@@ -837,17 +860,14 @@ internal class AndroidGatewayProjection(
             return ConversationPlan(conversationItems.toMap(), conversationLastSequences.toMap())
         }
         require(event.kind == "transition")
-        val patch = adapterJson.decodeFromString<SharedConversationPatch>(
-            requireNotNull(event.statePayloadJson)
-        )
-        require(patch.schema == 1 && patch.sessionId.isNotBlank() && patch.lastSequence >= -1)
+        val payload = requireNotNull(event.statePayloadJson)
+        val patch = requireNotNull(SharedConversationPatchGuard.validateAndDecode(payload))
         val next = conversationItems.toMutableMap()
         val nextSequences = conversationLastSequences.toMutableMap()
         val previousSequence = nextSequences[patch.sessionId] ?: -1
         if (patch.replacesAll) {
             val replacement = requireNotNull(patch.replacementItems)
             require(patch.operations.isEmpty())
-            require(replacement.map(ConversationItem::id).distinct().size == replacement.size)
             val isExplicitClear = replacement.isEmpty() && patch.lastSequence == -1
             require(isExplicitClear || patch.lastSequence >= previousSequence)
             next[patch.sessionId] = replacement
@@ -864,28 +884,48 @@ internal class AndroidGatewayProjection(
             when (operation.kind) {
                 "insert" -> {
                     val item = requireNotNull(operation.item)
-                    require(operation.itemId == null && operation.delta == null)
                     require(items.none { it.id == item.id })
                     items += item
                 }
+                "insert-before" -> {
+                    val item = requireNotNull(operation.item)
+                    val anchor = requireNotNull(operation.itemId)
+                    require(items.none { it.id == item.id })
+                    val index = items.indexOfFirst { it.id == anchor }
+                    require(index >= 0)
+                    items.add(index, item)
+                }
                 "append-text" -> {
-                    require(operation.item == null && !operation.itemId.isNullOrBlank() && operation.delta != null)
                     val index = items.indexOfFirst { it.id == operation.itemId }
                     require(index >= 0)
-                    items[index] = items[index].copy(
-                        text = items[index].text + operation.delta,
-                        epochSeconds = operation.epochSeconds ?: items[index].epochSeconds
+                    val previous = items[index]
+                    val itemID = requireNotNull(operation.itemId)
+                    val (segments, changedIndices) = applyConversationSegmentChanges(previous, operation, itemID)
+                    val nextText = previous.text + requireNotNull(operation.delta)
+                    if (segments != null) {
+                        require(
+                            com.clarklevis.dsh.shared.projection.ConversationProjectionGuard.validAppendedSegments(
+                                previousItem = previous,
+                                updatedText = nextText,
+                                updatedSegments = segments,
+                                changedIndices = changedIndices,
+                                contentAlreadyValidated = true
+                            )
+                        )
+                    }
+                    items[index] = previous.copy(
+                        text = nextText,
+                        epochSeconds = requireNotNull(operation.epochSeconds),
+                        segments = segments
                     )
                 }
                 "replace" -> {
                     val item = requireNotNull(operation.item)
-                    require(operation.itemId == item.id && operation.delta == null && operation.epochSeconds == null)
                     val index = items.indexOfFirst { it.id == item.id }
                     require(index >= 0)
                     items[index] = item
                 }
                 "remove" -> {
-                    require(operation.item == null && !operation.itemId.isNullOrBlank() && operation.delta == null)
                     require(items.removeAll { it.id == operation.itemId })
                 }
                 else -> error("unknown conversation operation")
@@ -894,6 +934,35 @@ internal class AndroidGatewayProjection(
         next[patch.sessionId] = items
         nextSequences[patch.sessionId] = patch.lastSequence
         return ConversationPlan(next, nextSequences)
+    }
+
+    private fun applyConversationSegmentChanges(
+        item: ConversationItem,
+        operation: com.clarklevis.dsh.shared.projection.ConversationProjectionOperation,
+        itemID: String
+    ): Pair<List<ConversationSegment>?, Set<Int>> {
+        operation.segments?.let { return it to it.indices.toSet() }
+        val changes = operation.segmentChanges ?: run {
+            val old = item.segments ?: return null to emptySet()
+            val next = old.toMutableList()
+            val last = next.lastOrNull() as? MarkdownSegment ?: return old to emptySet()
+            next[next.lastIndex] = last.copy(text = last.text + requireNotNull(operation.delta))
+            return next to setOf(next.lastIndex)
+        }
+        val next = requireNotNull(item.segments) { "segment changes require existing segments" }.toMutableList()
+        var previousIndex = -1
+        val changedIndices = mutableSetOf<Int>()
+        changes.forEach { change ->
+            require(change.index > previousIndex && change.index >= 0)
+            previousIndex = change.index
+            when {
+                change.index < next.size -> next[change.index] = change.segment
+                change.index == next.size -> next.add(change.segment)
+                else -> error("segment change index out of bounds for $itemID")
+            }
+            changedIndices += change.index
+        }
+        return next to changedIndices
     }
 
     private data class HistoryPlan(
@@ -941,6 +1010,7 @@ private fun mobileConversationLabels(): ConversationProjectionLabels {
 internal class MviEnvelopeValidator(private val expectedDomain: String) {
     private var initialized = false
     private var failed = false
+    val isOperational: Boolean get() = !failed
     private var lastSequence = 0L
     private val recentTransactions = ArrayDeque<String>()
     private val transactionSet = mutableSetOf<String>()

@@ -707,6 +707,7 @@ struct ConversationView: View {
     @State private var submittedQueueDraft: String?
     @State private var submittedQueueImages: [GatewayOutgoingImage] = []
     @State private var submittedQueueSessionID: String?
+    @State private var submittedQueueRequestID: String?
     @State private var composerHeight: CGFloat = 168
     @State private var viewportScrollToBottomToken = 0
     @State private var viewportProxy = ConversationViewportProxy()
@@ -804,6 +805,9 @@ struct ConversationView: View {
         }
         .sheet(item: conversationPreviewBinding) { request in
             WorkspaceFilePreviewLoadingSheet(store: store, request: request)
+        }
+        .sheet(item: $store.genuiDetail) { detail in
+            GenuiDetailSheet(detail: detail)
         }
         .fullScreenCover(item: $imageGalleryRequest) { request in
             SessionConversationImageGallery(store: store, request: request)
@@ -1595,8 +1599,10 @@ struct ConversationView: View {
     private var composerCardSessionLifecycle: some View {
         AnyView(composerCardSurface)
         .onChangeCompat(of: store.messageAcceptedRevision) { _, _ in
-            guard let submitted = submittedQueueDraft else { return }
-            defer { submittedQueueDraft = nil; submittedQueueImages = [] }
+            guard let submitted = submittedQueueDraft,
+                  submittedQueueRequestID != nil,
+                  submittedQueueRequestID == store.messageAcceptedRequestID else { return }
+            defer { submittedQueueDraft = nil; submittedQueueImages = []; submittedQueueRequestID = nil; submittedQueueSessionID = nil }
             if let target = submittedQueueSessionID, target != store.selectedSessionId {
                 if store.composerDraftText(for: target) == submitted, store.composerDraftImages(for: target) == submittedQueueImages {
                     store.setComposerDraftText("", for: target)
@@ -1798,6 +1804,7 @@ struct ConversationView: View {
                 submittedQueueDraft = draft
                 submittedQueueImages = images
                 submittedQueueSessionID = store.selectedSessionId
+                submittedQueueRequestID = store.messageSubmissionRequestID
                 return
             }
             if store.commandSubmissionPending {
@@ -2633,18 +2640,24 @@ struct ConversationView: View {
     private var searchTargetViewportID: String? {
         guard let target = store.conversationSearchTarget else { return nil }
         let eventID = String(target.dropFirst("message-".count))
+        func matches(_ item: ConversationItem) -> Bool {
+            item.id == eventID ||
+                item.id.hasPrefix(eventID + "-") ||
+                item.sourceEventId == eventID ||
+                item.sourceEventId?.hasPrefix(eventID + "-") == true
+        }
         return ConversationDisplayEntry.make(from: conversationItems, imageReference: { url in
             store.selectedSessionId.flatMap { store.galleryImageReference(url: url, sessionID: $0) }
         }).first { entry in
             switch entry.content {
             case .timeSeparator: false
-            case .message(let item): item.id == eventID || item.id.hasPrefix(eventID + "-")
-            case .process(let group): group.items.contains { $0.id == eventID || $0.id.hasPrefix(eventID + "-") }
+            case .message(let item): matches(item)
+            case .process(let group): group.items.contains(where: matches)
             }
         }?.id ?? target
     }
 
-    private func messageRow(_ item: ConversationItem, showsCopyButton: Bool, sessionID: String) -> some View {
+    private func messageRow(_ item: ConversationItem, showsCopyButton: Bool, sessionID: String, isSearchContext: Bool = false) -> some View {
         ConversationRow(
             item: item,
             showsCopyButton: showsCopyButton,
@@ -2652,7 +2665,16 @@ struct ConversationView: View {
             imageError: { store.imageLoadError(for: $0, sessionID: sessionID) },
             onRetryImage: { store.retryImageAttachment($0, sessionID: sessionID) },
             onOpenFile: conversationFileOpener(),
-            onOpenUploadedFile: uploadedFileOpener()
+            onOpenUploadedFile: uploadedFileOpener(),
+            onGenuiAction: { blockID, contentVersion, actionJSON in
+                store.handleGenuiAction(
+                    blockID: blockID,
+                    contentVersion: contentVersion,
+                    actionJSON: actionJSON,
+                    sourceSessionID: sessionID,
+                    isSearchContext: isSearchContext
+                )
+            }
         ).environment(\.messageQuoteAction, composerQuoteAction)
             .environment(\.workspaceMarkdownImageContext, store.markdownImageContext(sessionID: sessionID))
             .environment(\.conversationImagePreviewAction, { id in openImageGallery(id: id, sessionID: sessionID) })
@@ -2674,10 +2696,11 @@ struct ConversationView: View {
 
     private func makeConversationViewportEntries(from items: [ConversationItem]) -> [ConversationViewportEntry] {
         guard let sessionID = store.selectedSessionId else { return [] }
+        let isSearchContext = store.isShowingSearchContext
         var entries = ConversationDisplayEntry.make(from: items, imageReference: { url in
             store.galleryImageReference(url: url, sessionID: sessionID)
         }).flatMap { entry in
-            let revision = viewportEntryRevision(entry)
+            let revision = viewportEntryRevision(entry, isSearchContext: isSearchContext)
             if case .message(let item) = entry.content,
                item.kind == .user,
                item.textParts?.contains(where: { $0.type == "quote" }) != true {
@@ -2686,7 +2709,7 @@ struct ConversationView: View {
                     revision: revision,
                     userMessage: .init(item: item, imageData: { store.imageData(for: $0, sessionID: sessionID) },
                         showsCopyButton: entry.showsCopyButton, onOpenFile: uploadedFileOpener()),
-                    markdownContent: AnyView(messageRow(item, showsCopyButton: entry.showsCopyButton, sessionID: sessionID)),
+                    markdownContent: AnyView(messageRow(item, showsCopyButton: entry.showsCopyButton, sessionID: sessionID, isSearchContext: isSearchContext)),
                     layoutRevision: viewportEntryRevision(entry, includesImageState: false)
                 )]
             }
@@ -2695,7 +2718,7 @@ struct ConversationView: View {
                 return [ConversationViewportEntry(
                     id: entry.id,
                     revision: revision,
-                    content: AnyView(messageRow(item, showsCopyButton: entry.showsCopyButton, sessionID: sessionID)),
+                    content: AnyView(messageRow(item, showsCopyButton: entry.showsCopyButton, sessionID: sessionID, isSearchContext: isSearchContext)),
                     // 生成中与完成态共用 MarkdownUI；高度按正文版本更新，根视图身份保持稳定。
                     clipsContentToBounds: !markdownContainsAppLinkCards(item.text),
                     layoutRevision: viewportEntryRevision(entry, includesImageState: false),
@@ -2851,10 +2874,15 @@ struct ConversationView: View {
         }
     }
 
-    private func viewportEntryRevision(_ entry: ConversationDisplayEntry, includesImageState: Bool = true) -> Int {
+    private func viewportEntryRevision(
+        _ entry: ConversationDisplayEntry,
+        includesImageState: Bool = true,
+        isSearchContext: Bool = false
+    ) -> Int {
         let sessionID = store.selectedSessionId ?? ""
         var hasher = Hasher()
         hasher.combine(store.supportsMessageQuotes)
+        hasher.combine(isSearchContext)
         hasher.combine(entry.id)
         hasher.combine(entry.showsCopyButton)
         switch entry.content {
@@ -2867,6 +2895,25 @@ struct ConversationView: View {
             hasher.combine(item.title)
             hasher.combine(item.text)
             hasher.combine(item.textParts)
+            if let segments = item.segments {
+                hasher.combine(segments.count)
+                for segment in segments {
+                    switch segment {
+                    case .markdown(let chunk):
+                        hasher.combine(0)
+                        hasher.combine(chunk.utf16.count)
+                    case .genui(let block):
+                        hasher.combine(1)
+                        hasher.combine(block.id)
+                        hasher.combine(block.state)
+                        hasher.combine(block.interactive)
+                        hasher.combine(block.contentVersion)
+                        hasher.combine(block.fallbackStart)
+                        hasher.combine(block.fallbackEnd)
+                        hasher.combine(block.rawJson.utf16.count)
+                    }
+                }
+            }
             hasher.combine(item.isError)
             hasher.combine(item.files)
             hasher.combine(item.knownFiles)
@@ -5586,6 +5633,7 @@ struct ConversationRow: View {
     var onRetryImage: (GatewayImageAttachment) -> Void = { _ in }
     var onOpenFile: ((String) -> Void)? = nil
     var onOpenUploadedFile: ((PresentedFile) -> Void)? = nil
+    var onGenuiAction: (_ blockID: String, _ contentVersion: String, _ actionJSON: String) -> Void = { _, _, _ in }
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.messageQuoteAction) private var onQuote
 
@@ -5627,7 +5675,13 @@ struct ConversationRow: View {
                     AttachmentImageGrid(attachments: item.images, imageData: imageData, imageError: imageError, onRetry: onRetryImage)
                 }
                 if !item.text.isEmpty {
-                    MarkdownContent(item.text, knownFiles: item.knownFiles, onOpenFile: onOpenFile)
+                    MarkdownContent(
+                        item.text,
+                        knownFiles: item.knownFiles,
+                        onOpenFile: onOpenFile,
+                        segments: item.segments,
+                        onGenuiAction: onGenuiAction
+                    )
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 ForEach(item.files, id: \.path) { file in
@@ -5884,6 +5938,7 @@ struct MarkdownContent: View {
     @Environment(\.workspaceMarkdownImageContext) private var workspaceImages
     @Environment(\.messageQuoteAction) private var onQuote
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @AppStorage(AppFontScale.key) private var fontScale = 1.0
     @AppStorage(AppFontScale.followsSystemKey) private var fontFollowsSystem = false
     let text: String
@@ -5891,14 +5946,18 @@ struct MarkdownContent: View {
     var knownFiles: [PresentedFile] = []
     var onOpenFile: ((String) -> Void)?
     var textColor: Color = .primary
+    var segments: [ConversationSegment]? = nil
+    var onGenuiAction: (_ blockID: String, _ contentVersion: String, _ actionJSON: String) -> Void = { _, _, _ in }
     @State private var selectionDocument: MarkdownSelectionDocument?
 
-    init(_ text: String, compact: Bool = false, knownFiles: [PresentedFile] = [], onOpenFile: ((String) -> Void)? = nil, textColor: Color = .primary) {
+    init(_ text: String, compact: Bool = false, knownFiles: [PresentedFile] = [], onOpenFile: ((String) -> Void)? = nil, textColor: Color = .primary, segments: [ConversationSegment]? = nil, onGenuiAction: @escaping (_ blockID: String, _ contentVersion: String, _ actionJSON: String) -> Void = { _, _, _ in }) {
         self.text = text
         self.compact = compact
         self.knownFiles = knownFiles
         self.onOpenFile = onOpenFile
         self.textColor = textColor
+        self.segments = segments
+        self.onGenuiAction = onGenuiAction
     }
 
     var body: some View {
@@ -5930,7 +5989,36 @@ struct MarkdownContent: View {
         )
     }
 
-    private var renderedMarkdown: some View {
+    @ViewBuilder private var renderedMarkdown: some View {
+        if let segments {
+            VStack(alignment: .leading, spacing: compact ? 6 : 10) {
+                ForEach(Array(segments.enumerated()), id: \.offset) { _, segment in
+                    switch segment {
+                    case .markdown(let text):
+                        markdownView(text)
+                    case .genui(let block):
+                        GenuiSegmentView(
+                            segment: block,
+                            sourceText: text,
+                            markdown: { AnyView(markdownView($0)) },
+                            isDark: colorScheme == .dark,
+                            fontScale: GenuiFontScale.effective(
+                                appScale: fontScale,
+                                followsSystem: fontFollowsSystem,
+                                dynamicTypeSize: dynamicTypeSize
+                            ),
+                            onAction: onGenuiAction
+                        )
+                        .id(block.id)
+                    }
+                }
+            }
+        } else {
+            markdownView(text)
+        }
+    }
+
+    private func markdownView(_ text: String) -> some View {
         Markdown(PreparedMarkdownCache.document(for: text, filePaths: knownFiles.map(\.path)))
             .markdownImageProvider(MathMarkdownImageProvider(fontSize: mathFontSize, workspace: workspaceImages))
             .markdownInlineImageProvider(MathMarkdownInlineImageProvider(fontSize: mathFontSize, dark: colorScheme == .dark, workspace: workspaceImages))
