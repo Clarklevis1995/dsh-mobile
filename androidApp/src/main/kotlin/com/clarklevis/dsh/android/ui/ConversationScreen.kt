@@ -433,6 +433,9 @@ private fun ConversationScreenContent(
     if (showWorkspaceFiles) {
         WorkspaceFilesBottomSheet(stateHolder, initialPath = workspaceInitialPath) { showWorkspaceFiles = false }
     }
+    stateHolder.genuiDetails?.let { details ->
+        GenuiDetailsSheet(details, stateHolder::dismissGenuiDetails)
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -900,9 +903,11 @@ private fun ConversationTimeline(
     val latestOnUserInteraction by rememberUpdatedState(onUserInteraction)
     val latestSnapshot by rememberUpdatedState(stateHolder.snapshot)
     val latestRunning by rememberUpdatedState(selectedSessionIsRunning)
+    val latestSearchContext by rememberUpdatedState(stateHolder.localSearchIsFragment || stateHolder.localSearchIsOpening)
     var presentation by remember(selectedSessionId) {
         mutableStateOf(prepareConversationPresentation(latestItems, selectedSessionIsRunning,
-            stateHolder.snapshot.selectedHistoryEarliestSequence, stateHolder.snapshot.markdownImages))
+            stateHolder.snapshot.selectedHistoryEarliestSequence, stateHolder.snapshot.markdownImages, selectedSessionId,
+            stateHolder.localSearchIsFragment || stateHolder.localSearchIsOpening))
     }
     val items = presentation.items
     val timelineEntries = presentation.entries
@@ -1001,7 +1006,8 @@ private fun ConversationTimeline(
             latestSnapshot.selectedHistoryEarliestSequence, latestRunning, isUserTimelineScrolling || touchingTimeline,
             interactionGeneration, selectedSessionId in stateHolder.historyPagingSessionIds || latestSnapshot.selectedHistoryIsLoadingOlder,
             latestSnapshot.selectedHistoryHasMore, latestSnapshot.selectedHistoryError != null,
-            historyReadBatch != null, latestSnapshot.markdownImages) }
+            historyReadBatch != null, latestSnapshot.markdownImages, latestSnapshot.selectedSessionId,
+            latestSearchContext) }
             .distinctUntilChanged()
             .collect { targetState ->
                 val batch = historyReadBatch
@@ -1030,7 +1036,8 @@ private fun ConversationTimeline(
                             preparedWhileMoving?.imageReferences != targetState.imageReferences)) {
                         val target = withContext(Dispatchers.Default) {
                             prepareConversationPresentation(targetState.items, targetState.running,
-                                targetState.earliestSequence, targetState.imageReferences)
+                                targetState.earliestSequence, targetState.imageReferences, targetState.sourceSessionId,
+                                targetState.isSearchContext)
                         }
                         warmReadingWindow(target)
                         preparedWhileMoving = target
@@ -1045,9 +1052,12 @@ private fun ConversationTimeline(
                 }
                 val source = latestSnapshot
                 val running = latestRunning
+                val searchContext = latestSearchContext
                 if (source.conversation === presentation.items && running == presentation.running &&
                     source.selectedHistoryEarliestSequence == presentation.earliestSequence &&
-                    source.markdownImages == presentation.imageReferences) return@collect
+                    source.markdownImages == presentation.imageReferences &&
+                    source.selectedSessionId == presentation.sourceSessionId &&
+                    searchContext == presentation.isSearchContext) return@collect
                 val generation = interactionGeneration
                 val older = presentation.earliestSequence?.let { old ->
                     source.selectedHistoryEarliestSequence?.let { it < old }
@@ -1058,10 +1068,12 @@ private fun ConversationTimeline(
                 try {
                     val target = preparedWhileMoving?.takeIf { it.items === source.conversation &&
                         it.running == running && it.earliestSequence == source.selectedHistoryEarliestSequence &&
-                        it.imageReferences == source.markdownImages }
+                        it.imageReferences == source.markdownImages && it.sourceSessionId == source.selectedSessionId &&
+                        it.isSearchContext == searchContext }
                         ?: withContext(Dispatchers.Default) {
                             prepareConversationPresentation(source.conversation, running,
-                                source.selectedHistoryEarliestSequence, source.markdownImages)
+                                source.selectedHistoryEarliestSequence, source.markdownImages, source.selectedSessionId,
+                                searchContext)
                         }
                     preparedWhileMoving = null
                     if (older) {
@@ -1363,6 +1375,35 @@ private fun ConversationTimeline(
                                 onOpenFile = { path ->
                                     selectedSessionId?.let { session ->
                                         stateHolder.openConversationFile(stateHolder.gatewayLocalId, session, path)
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+                            )
+                            is ConversationTimelineEntry.AssistantGenui -> GenuiSegmentView(
+                                segment = entry.segment,
+                                source = entry.copyMarkdown,
+                                markdown = { markdown ->
+                                    DshLazyMarkdownText(
+                                        markdown = markdown,
+                                        copyMarkdown = entry.copyMarkdown,
+                                        knownFiles = entry.knownFiles,
+                                        onOpenFile = { path ->
+                                            selectedSessionId?.let { session ->
+                                                stateHolder.openConversationFile(stateHolder.gatewayLocalId, session, path)
+                                            }
+                                        },
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                },
+                                onAction = { actionJson, contentVersion ->
+                                    entry.sourceSessionId?.let { sessionId ->
+                                        stateHolder.submitGenuiAction(
+                                            actionJson,
+                                            contentVersion,
+                                            sessionId,
+                                            entry.segment.id,
+                                            entry.isSearchContext
+                                        )
                                     }
                                 },
                                 modifier = Modifier.fillMaxWidth().padding(top = 4.dp)

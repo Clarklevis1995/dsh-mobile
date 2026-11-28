@@ -4,6 +4,9 @@ import com.clarklevis.dsh.android.localization.appText
 import com.clarklevis.dsh.shared.protocol.GatewayImageAttachment
 import com.clarklevis.dsh.shared.projection.ConversationItem
 import com.clarklevis.dsh.shared.projection.ConversationItemKind
+import com.clarklevis.dsh.shared.projection.GenuiBlockParser
+import com.clarklevis.dsh.shared.projection.GenuiSegment
+import com.clarklevis.dsh.shared.projection.MarkdownSegment
 import kotlin.math.roundToInt
 
 internal sealed interface ConversationDisplayEntry {
@@ -38,6 +41,7 @@ internal enum class ConversationDisplayContentType {
     ASSISTANT,
     ASSISTANT_HEADER,
     ASSISTANT_MARKDOWN,
+    ASSISTANT_GENUI,
     ASSISTANT_FOOTER,
     PROCESS,
     STATUS,
@@ -67,10 +71,27 @@ internal sealed interface ConversationTimelineEntry {
         val blockIndex: Int,
         val markdown: String,
         val knownFiles: List<com.clarklevis.dsh.shared.protocol.PresentedFile> = emptyList(),
-        val copyMarkdown: String = markdown
+        val copyMarkdown: String = markdown,
+        val chunkIndex: Int = 0
     ) : ConversationTimelineEntry {
-        override val id: String = "assistant:$messageId:markdown:$blockIndex"
+        override val id: String = if (chunkIndex == 0) {
+            "assistant:$messageId:markdown:$blockIndex"
+        } else {
+            "assistant:$messageId:markdown:$blockIndex:$chunkIndex"
+        }
         override val contentType = ConversationDisplayContentType.ASSISTANT_MARKDOWN
+        override val images = emptyList<GatewayImageAttachment>()
+    }
+
+    data class AssistantGenui(
+        val segment: GenuiSegment,
+        val knownFiles: List<com.clarklevis.dsh.shared.protocol.PresentedFile> = emptyList(),
+        val copyMarkdown: String,
+        val sourceSessionId: String? = null,
+        val isSearchContext: Boolean = false
+    ) : ConversationTimelineEntry {
+        override val id: String = segment.id
+        override val contentType = ConversationDisplayContentType.ASSISTANT_GENUI
         override val images = emptyList<GatewayImageAttachment>()
     }
 
@@ -87,7 +108,9 @@ internal sealed interface ConversationTimelineEntry {
 
 internal fun makeConversationTimelineEntries(
     entries: List<ConversationDisplayEntry>,
-    activeStreamingAssistantMessageId: String? = null
+    activeStreamingAssistantMessageId: String? = null,
+    sourceSessionId: String? = null,
+    isSearchContext: Boolean = false
 ): List<ConversationTimelineEntry> = buildList {
     entries.forEach { entry ->
         val item = (entry as? ConversationDisplayEntry.Message)?.item
@@ -102,16 +125,47 @@ internal fun makeConversationTimelineEntries(
         if (item.images.isNotEmpty()) {
             add(ConversationTimelineEntry.AssistantHeader(item))
         }
-        splitMarkdownForLazyLayout(item.text).forEachIndexed { index, markdown ->
-            add(
-                ConversationTimelineEntry.AssistantMarkdown(
-                    messageId = item.id,
-                    blockIndex = index,
-                    markdown = markdown,
-                    knownFiles = item.knownFiles,
-                    copyMarkdown = item.text
+        val segments = item.segments
+        if (segments == null) {
+            splitMarkdownForLazyLayout(item.text).forEachIndexed { index, markdown ->
+                add(
+                    ConversationTimelineEntry.AssistantMarkdown(
+                        messageId = item.id,
+                        blockIndex = index,
+                        markdown = markdown,
+                        knownFiles = item.knownFiles,
+                        copyMarkdown = item.text
+                    )
                 )
-            )
+            }
+        } else {
+            segments.forEachIndexed { segmentIndex, segment ->
+                when (segment) {
+                    is MarkdownSegment -> {
+                        splitMarkdownForLazyLayout(segment.text).forEachIndexed { chunkIndex, markdown ->
+                            add(
+                                ConversationTimelineEntry.AssistantMarkdown(
+                                    messageId = item.id,
+                                    blockIndex = segmentIndex,
+                                    chunkIndex = chunkIndex,
+                                    markdown = markdown,
+                                    knownFiles = item.knownFiles,
+                                    copyMarkdown = item.text
+                                )
+                            )
+                        }
+                    }
+                    is GenuiSegment -> add(
+                        ConversationTimelineEntry.AssistantGenui(
+                            segment = segment,
+                            knownFiles = item.knownFiles,
+                            copyMarkdown = item.text,
+                            sourceSessionId = sourceSessionId,
+                            isSearchContext = isSearchContext
+                        )
+                    )
+                }
+            }
         }
         if (item.id != activeStreamingAssistantMessageId || item.files.isNotEmpty()) {
             add(ConversationTimelineEntry.AssistantFooter(item.id, item.text, item.files))
@@ -333,7 +387,13 @@ internal fun makeConversationDisplayEntries(
         if (item.kind == ConversationItemKind.USER) finishTurn()
         if (item.kind == ConversationItemKind.GENERATED_IMAGES) pendingImageIds += item.id
         if (item.kind == ConversationItemKind.ASSISTANT && ("![" in item.text || "<img" in item.text.lowercase())) {
-            val document = markdownInteractionParser.parse(item.text)
+            val markdownText = item.segments?.joinToString("\n\n") { segment ->
+                when (segment) {
+                    is MarkdownSegment -> segment.text
+                    is GenuiSegment -> GenuiBlockParser.fallbackMarkdown(segment, item.text)
+                }
+            } ?: item.text
+            val document = markdownInteractionParser.parse(markdownText)
             DshMarkdownImagePlugin().beforeRender(document)
             document.accept(object : org.commonmark.node.AbstractVisitor() {
                 override fun visit(image: org.commonmark.node.Image) {

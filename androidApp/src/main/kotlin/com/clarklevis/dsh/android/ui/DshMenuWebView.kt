@@ -18,7 +18,7 @@ internal data class DshNativeTextMenu(
 )
 
 /** WebView 保留浏览器的原生选择行为，菜单动作和位置交由项目菜单组件呈现。 */
-internal class DshMenuWebView(context: Context) : WebView(context) {
+internal open class DshMenuWebView(context: Context) : WebView(context) {
     var onMenuChanged: ((DshNativeTextMenu?) -> Unit)? = null
     private var activeMode: ActionMode? = null
     private var contentRect = Rect()

@@ -95,19 +95,34 @@ internal data class ConversationTimelinePresentation(
     val streamingId: String?,
     val earliestSequence: Int? = null,
     val running: Boolean = false,
-    val imageReferences: Map<String, GatewayImageAttachment> = emptyMap()
+    val imageReferences: Map<String, GatewayImageAttachment> = emptyMap(),
+    val sourceSessionId: String? = null,
+    val isSearchContext: Boolean = false
 )
 
 internal fun prepareConversationPresentation(
     items: List<ConversationItem>,
     running: Boolean,
     earliestSequence: Int? = null,
-    imageReferences: Map<String, GatewayImageAttachment> = emptyMap()
+    imageReferences: Map<String, GatewayImageAttachment> = emptyMap(),
+    sourceSessionId: String? = null,
+    isSearchContext: Boolean = false
 ): ConversationTimelinePresentation {
     val streamingId = activeStreamingAssistantMessageId(items, running)
     return ConversationTimelinePresentation(
-        items, makeConversationTimelineEntries(makeConversationDisplayEntries(items, imageReferences), streamingId),
-        streamingId, earliestSequence, running, imageReferences
+        items,
+        makeConversationTimelineEntries(
+            makeConversationDisplayEntries(items, imageReferences),
+            streamingId,
+            sourceSessionId,
+            isSearchContext
+        ),
+        streamingId,
+        earliestSequence,
+        running,
+        imageReferences,
+        sourceSessionId,
+        isSearchContext
     )
 }
 
@@ -156,5 +171,7 @@ internal data class HistoryPresentationTarget(
     val hasMore: Boolean = false,
     val failed: Boolean = false,
     val readingBatch: Boolean = false,
-    val imageReferences: Map<String, GatewayImageAttachment> = emptyMap()
+    val imageReferences: Map<String, GatewayImageAttachment> = emptyMap(),
+    val sourceSessionId: String? = null,
+    val isSearchContext: Boolean = false
 )

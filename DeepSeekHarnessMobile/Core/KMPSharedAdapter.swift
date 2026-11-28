@@ -18,11 +18,28 @@ private struct KMPConversationItemSnapshot: Decodable {
     let files: [PresentedFile]?
     let knownFiles: [PresentedFile]?
     let textParts: [GatewayTextPart]?
+    let segments: [ConversationSegment]?
+    let sourceEventId: String?
 
     var item: ConversationItem? {
         guard !id.isEmpty,
+              id.utf16.count <= 512,
               epochSeconds.isFinite,
+              (segments == nil || text.utf16.count <= 2_000_000),
+              (sourceEventId == nil || (!sourceEventId!.isEmpty && sourceEventId!.utf16.count <= 512)),
               let mappedKind = ConversationItem.Kind(kmpWireValue: kind) else { return nil }
+        let mappedSegments: [ConversationSegment]?
+        if let segments {
+            guard let validated = try? validatedConversationSegments(
+                segments,
+                itemID: id,
+                itemText: text,
+                itemKind: mappedKind
+            ) else { return nil }
+            mappedSegments = validated
+        } else {
+            mappedSegments = nil
+        }
         return ConversationItem(
             id: id,
             kind: mappedKind,
@@ -33,9 +50,80 @@ private struct KMPConversationItemSnapshot: Decodable {
             date: Date(timeIntervalSince1970: epochSeconds),
             files: files ?? [],
             knownFiles: knownFiles ?? [],
-            textParts: textParts
+            textParts: textParts,
+            segments: mappedSegments,
+            sourceEventId: sourceEventId
         )
     }
+}
+
+private func validatedConversationSegments(
+    _ segments: [ConversationSegment],
+    itemID: String,
+    itemText: String,
+    itemKind: ConversationItem.Kind,
+    unchangedPrefixCount: Int = 0
+) throws -> [ConversationSegment] {
+    guard itemKind == .assistant else {
+        throw KMPConversationStoreError.invalidEvent("only assistant items may carry conversation segments")
+    }
+    guard !segments.isEmpty, segments.count <= 33 else {
+        throw KMPConversationStoreError.invalidEvent("conversation segments count is invalid")
+    }
+    let itemUTF16 = itemText.utf16
+    let itemUTF16Count = itemUTF16.count
+    guard itemUTF16Count <= 2_000_000 else {
+        throw KMPConversationStoreError.invalidEvent("segmented assistant item exceeds text bounds")
+    }
+    var blockIDs = Set<String>()
+    for (index, segment) in segments.enumerated() {
+        switch segment {
+        case .markdown(let text):
+            if index < unchangedPrefixCount { continue }
+            guard text.utf16.count <= itemUTF16Count else {
+                throw KMPConversationStoreError.invalidEvent("markdown segment exceeds item text length")
+            }
+        case .genui(let block):
+            guard blockIDs.insert(block.id).inserted else {
+                throw KMPConversationStoreError.invalidEvent("GenUI segment identity is duplicated")
+            }
+            if index < unchangedPrefixCount { continue }
+            guard block.id.hasPrefix(itemID + "-genui-") else {
+                throw KMPConversationStoreError.invalidEvent("GenUI segment identity is invalid")
+            }
+            guard block.rawJson.utf16.count <= 512_000 else {
+                throw KMPConversationStoreError.invalidEvent("GenUI segment payload exceeds bounds")
+            }
+            if block.state == .ready {
+                guard !block.rawJson.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                      block.contentVersion.utf16.count == 64 else {
+                    throw KMPConversationStoreError.invalidEvent("ready GenUI segment is missing its payload or version")
+                }
+            } else {
+                guard block.rawJson.isEmpty, block.contentVersion.isEmpty, !block.interactive else {
+                    throw KMPConversationStoreError.invalidEvent("non-ready GenUI segment must not carry rawJson, version, or interactive state")
+                }
+            }
+            guard block.fallbackStart >= 0,
+                  block.fallbackEnd >= block.fallbackStart,
+                  block.fallbackEnd <= itemUTF16Count else {
+                throw KMPConversationStoreError.invalidEvent("GenUI segment fallback range is out of bounds")
+            }
+            let start = itemUTF16.index(itemUTF16.startIndex, offsetBy: block.fallbackStart)
+            let end = itemUTF16.index(itemUTF16.startIndex, offsetBy: block.fallbackEnd)
+            let slice = String(itemText[start..<end])
+            if !block.fallbackMarkdown.isEmpty {
+                guard block.fallbackMarkdown == slice else {
+                    throw KMPConversationStoreError.invalidEvent("GenUI segment fallbackMarkdown mismatches source text")
+                }
+            } else {
+                guard slice.utf16.count > 32_768 else {
+                    throw KMPConversationStoreError.invalidEvent("GenUI segment missing inline fallbackMarkdown")
+                }
+            }
+        }
+    }
+    return segments
 }
 
 private extension ConversationItem.Kind {
@@ -56,12 +144,28 @@ private extension ConversationItem.Kind {
     }
 }
 
+private struct KMPConversationSegmentChange: Decodable {
+    let index: Int
+    let segment: ConversationSegment
+}
+
 private struct KMPConversationOperation: Decodable {
     let kind: String
     let item: KMPConversationItemSnapshot?
     let itemId: String?
     let delta: String?
     let epochSeconds: Double?
+    let segments: [ConversationSegment]?
+    let segmentChanges: [KMPConversationSegmentChange]?
+}
+
+private struct KMPGenuiActionIntentPayload: Encodable {
+    let sessionId: String
+    let activeSessionId: String?
+    let blockId: String
+    let contentVersion: String
+    let actionJson: String
+    let isSearchContext: Bool
 }
 
 private struct KMPConversationPatch: Decodable {
@@ -149,6 +253,7 @@ struct KMPPreparedConversationHistory: @unchecked Sendable {
 @MainActor
 final class KMPConversationStoreAdapter {
     private let store: any KMPConversationStoreBridging
+    private let facade: SharedMobileFacade
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
     private var cancelEventSubscription: (() -> Void)?
@@ -166,6 +271,7 @@ final class KMPConversationStoreAdapter {
         bridge: (any KMPConversationStoreBridging)? = nil,
         facade: SharedMobileFacade = SharedMobileFacade()
     ) {
+        self.facade = facade
         store = bridge ?? facade.makeConversationStore(
             userMessage: L10n.userMessageTitle,
             context: L10n.contextInjectionTitle(""),
@@ -320,6 +426,38 @@ final class KMPConversationStoreAdapter {
         }
     }
 
+    func dispatchGenuiAction(
+        sessionID: String,
+        activeSessionID: String?,
+        blockID: String,
+        contentVersion: String,
+        actionJSON: String,
+        isSearchContext: Bool
+    ) -> GenuiActionEffectPayload? {
+        guard isOperational,
+              !sessionID.isEmpty,
+              !blockID.isEmpty,
+              contentVersion.utf16.count == 64,
+              let shared = store as? SharedConversationStore else { return nil }
+        let payload = KMPGenuiActionIntentPayload(
+            sessionId: sessionID,
+            activeSessionId: activeSessionID,
+            blockId: blockID,
+            contentVersion: contentVersion,
+            actionJson: actionJSON,
+            isSearchContext: isSearchContext
+        )
+        guard let encoded = try? encode(payload),
+              let response = shared.dispatchGenuiActionJson(intentJson: encoded),
+              let effect = try? decoder.decode(GenuiActionEffectPayload.self, from: Data(response.utf8)),
+              effect.sessionId == sessionID,
+              effect.blockId == blockID,
+              effect.contentVersion == contentVersion else {
+            return nil
+        }
+        return effect
+    }
+
     private func dispatch(
         _ intent: KMPConversationIntent,
         operation: () throws -> SharedMviDispatchResult
@@ -380,6 +518,10 @@ final class KMPConversationStoreAdapter {
         case "transition":
             guard let payload = event.statePayloadJson else {
                 failClosed(.invalidEvent("transition is missing its patch"))
+                return
+            }
+            guard facade.validateConversationPatch(patchJson: payload) else {
+                failClosed(.invalidEvent("conversation patch violates shared wire invariants"))
                 return
             }
             do {
@@ -467,6 +609,8 @@ final class KMPConversationStoreAdapter {
                           operation.itemId == nil,
                           operation.delta == nil,
                           operation.epochSeconds == nil,
+                          operation.segments == nil,
+                          operation.segmentChanges == nil,
                           !next.contains(where: { $0.id == item.id }) else {
                         throw KMPConversationStoreError.invalidEvent("insert operation is invalid")
                     }
@@ -475,6 +619,8 @@ final class KMPConversationStoreAdapter {
                     guard let item = insertedItem,
                           let anchor = operation.itemId,
                           operation.delta == nil, operation.epochSeconds == nil,
+                          operation.segments == nil,
+                          operation.segmentChanges == nil,
                           !next.contains(where: { $0.id == item.id }),
                           let index = next.firstIndex(where: { $0.id == anchor }) else {
                         throw KMPConversationStoreError.invalidEvent("insert-before operation is invalid")
@@ -485,27 +631,83 @@ final class KMPConversationStoreAdapter {
                           let itemID = operation.itemId, !itemID.isEmpty,
                           let delta = operation.delta, !delta.isEmpty,
                           let epochSeconds = operation.epochSeconds, epochSeconds.isFinite,
+                          !(operation.segments != nil && operation.segmentChanges != nil),
                           let index = next.firstIndex(where: { $0.id == itemID }) else {
                         throw KMPConversationStoreError.invalidEvent("append-text operation is invalid")
                     }
                     let old = next[index]
+                    let nextText = old.text + delta
+                    let updatedSegments: [ConversationSegment]?
+                    if let fullSegments = operation.segments {
+                        updatedSegments = try validatedConversationSegments(
+                            fullSegments,
+                            itemID: itemID,
+                            itemText: nextText,
+                            itemKind: old.kind
+                        )
+                    } else if let changes = operation.segmentChanges {
+                        guard !changes.isEmpty, var existing = old.segments else {
+                            throw KMPConversationStoreError.invalidEvent("segmentChanges require existing segments")
+                        }
+                        var previousIndex = -1
+                        let unchangedPrefixCount = changes[0].index
+                        for change in changes {
+                            guard change.index > previousIndex, change.index >= 0 else {
+                                throw KMPConversationStoreError.invalidEvent("segmentChanges indices must be strictly ascending")
+                            }
+                            previousIndex = change.index
+                            if change.index < existing.count {
+                                existing[change.index] = change.segment
+                            } else if change.index == existing.count {
+                                existing.append(change.segment)
+                            } else {
+                                throw KMPConversationStoreError.invalidEvent("segmentChanges index is out of bounds")
+                            }
+                        }
+                        updatedSegments = try validatedConversationSegments(
+                            existing,
+                            itemID: itemID,
+                            itemText: nextText,
+                            itemKind: old.kind,
+                            unchangedPrefixCount: unchangedPrefixCount
+                        )
+                    } else if var existing = old.segments {
+                        var unchangedPrefixCount = existing.count
+                        if case .markdown(let tail) = existing.last {
+                            existing[existing.count - 1] = .markdown(tail + delta)
+                            unchangedPrefixCount = existing.count - 1
+                        }
+                        updatedSegments = try validatedConversationSegments(
+                            existing,
+                            itemID: itemID,
+                            itemText: nextText,
+                            itemKind: old.kind,
+                            unchangedPrefixCount: unchangedPrefixCount
+                        )
+                    } else {
+                        updatedSegments = nil
+                    }
                     next[index] = ConversationItem(
                         id: old.id,
                         kind: old.kind,
                         title: old.title,
-                        text: old.text + delta,
+                        text: nextText,
                         images: old.images,
                         isError: old.isError,
                         date: Date(timeIntervalSince1970: epochSeconds),
                         files: old.files,
                         knownFiles: old.knownFiles,
-                        textParts: old.textParts
+                        textParts: old.textParts,
+                        segments: updatedSegments,
+                        sourceEventId: old.sourceEventId
                     )
                 case "replace":
                     guard let item = operation.item?.item,
                           let itemID = operation.itemId, item.id == itemID,
                           operation.delta == nil,
                           operation.epochSeconds == nil,
+                          operation.segments == nil,
+                          operation.segmentChanges == nil,
                           let index = next.firstIndex(where: { $0.id == itemID }) else {
                         throw KMPConversationStoreError.invalidEvent("replace operation is invalid")
                     }
@@ -515,6 +717,8 @@ final class KMPConversationStoreAdapter {
                           let itemID = operation.itemId, !itemID.isEmpty,
                           operation.delta == nil,
                           operation.epochSeconds == nil,
+                          operation.segments == nil,
+                          operation.segmentChanges == nil,
                           let index = next.firstIndex(where: { $0.id == itemID }) else {
                         throw KMPConversationStoreError.invalidEvent("remove operation is invalid")
                     }
