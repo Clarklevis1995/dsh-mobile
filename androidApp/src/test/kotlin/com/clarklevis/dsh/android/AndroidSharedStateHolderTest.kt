@@ -4,6 +4,7 @@ import com.clarklevis.dsh.android.platform.AndroidPreparedImage
 import com.clarklevis.dsh.shared.gateway.GatewayOutgoingImage
 import com.clarklevis.dsh.shared.gateway.GatewayRuntimeEvent
 import com.clarklevis.dsh.shared.protocol.GatewayFrame
+import com.clarklevis.dsh.shared.protocol.GatewayWireDecoder
 import com.clarklevis.dsh.shared.protocol.GatewayWorkspace
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
